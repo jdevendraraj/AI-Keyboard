@@ -71,5 +71,5 @@ fun BottomSheetHostUi(
 }
 
 fun KeyboardState.isBottomSheetShowing(): Boolean {
-    return isActionsEditorVisible || isVoiceOverlayVisible
+    return isActionsEditorVisible
 }

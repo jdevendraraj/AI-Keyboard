@@ -5,14 +5,17 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Backspace
@@ -22,7 +25,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.patrickgold.florisboard.FlorisImeService
@@ -48,16 +53,38 @@ fun VoiceOverlayPanel(
     val context = LocalContext.current
     val keyboardManager by context.keyboardManager()
     
-    // Pulsing animation for the microphone when recording
-    val infiniteTransition = rememberInfiniteTransition(label = "mic_pulse")
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.15f,
+    // Levitating animation - gentle up and down movement
+    val infiniteTransition = rememberInfiniteTransition(label = "mic_animations")
+    val levitateOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -12f,
         animationSpec = infiniteRepeatable(
-            animation = tween(800),
+            animation = tween(2000, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "mic_levitate"
+    )
+    
+    // Subtle scale pulse for breathing effect
+    val scalePulse by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = androidx.compose.animation.core.FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "mic_scale"
+    )
+    
+    // Glow opacity pulse
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow_alpha"
     )
 
     SnyggBox(
@@ -80,7 +107,9 @@ fun VoiceOverlayPanel(
                 SnyggButton(
                     elementName = FlorisImeUi.SmartbarSharedActionsToggle.elementName,
                     onClick = {
+                        // Stop recording if active
                         onBackClick()
+                        // Close voice panel and return to keyboard
                         CoroutineScope(Dispatchers.Main).launch {
                             keyboardManager.activeState.batchEdit { it.isVoiceOverlayVisible = false }
                         }
@@ -89,7 +118,7 @@ fun VoiceOverlayPanel(
                     SnyggIcon(imageVector = Icons.Filled.ArrowBack)
                 }
                 SnyggText(
-                    text = "Try saying something",
+                    text = "Voice input",
                 )
                 Spacer(modifier = Modifier.size(24.dp))
             }
@@ -109,22 +138,75 @@ fun VoiceOverlayPanel(
                     SnyggIcon(imageVector = Icons.Filled.Settings)
                 }
                 
-                SnyggButton(
-                    elementName = FlorisImeUi.SmartbarSharedActionsToggle.elementName,
-                    onClick = onMicClick,
-                    modifier = Modifier
-                        .size(86.dp),
+                Box(
+                    modifier = Modifier.size(100.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Box(
+                    // Neon glow layers (only when recording)
+                    if (isRecording) {
+                        // Outer glow - larger, more blurred
+                        Box(
+                            modifier = Modifier
+                                .size(90.dp)
+                                .offset(y = levitateOffset.dp)
+                                .scale(scalePulse)
+                                .background(
+                                    color = Color(0xFF00D4FF).copy(alpha = glowAlpha * 0.4f),
+                                    shape = CircleShape
+                                )
+                                .blur(20.dp)
+                        )
+                        // Middle glow
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .offset(y = levitateOffset.dp)
+                                .scale(scalePulse)
+                                .background(
+                                    color = Color(0xFF00D4FF).copy(alpha = glowAlpha * 0.6f),
+                                    shape = CircleShape
+                                )
+                                .blur(12.dp)
+                        )
+                        // Inner glow
+                        Box(
+                            modifier = Modifier
+                                .size(70.dp)
+                                .offset(y = levitateOffset.dp)
+                                .scale(scalePulse)
+                                .background(
+                                    color = Color(0xFF00D4FF).copy(alpha = glowAlpha),
+                                    shape = CircleShape
+                                )
+                                .blur(8.dp)
+                        )
+                    }
+                    
+                    // Main button
+                    SnyggButton(
+                        elementName = FlorisImeUi.SmartbarSharedActionsToggle.elementName,
+                        onClick = onMicClick,
                         modifier = Modifier
                             .size(86.dp)
-                            .then(if (isRecording) Modifier.scale(scale) else Modifier),
-                        contentAlignment = Alignment.Center,
+                            .then(
+                                if (isRecording) {
+                                    Modifier
+                                        .offset(y = levitateOffset.dp)
+                                        .scale(scalePulse)
+                                } else {
+                                    Modifier
+                                }
+                            ),
                     ) {
-                        SnyggIcon(
-                            imageVector = Icons.Filled.Mic,
-                            modifier = Modifier.size(36.dp),
-                        )
+                        Box(
+                            modifier = Modifier.size(86.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            SnyggIcon(
+                                imageVector = Icons.Filled.Mic,
+                                modifier = Modifier.size(36.dp),
+                            )
+                        }
                     }
                 }
                 

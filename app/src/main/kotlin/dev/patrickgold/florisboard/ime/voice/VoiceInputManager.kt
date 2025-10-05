@@ -20,6 +20,8 @@ import dev.patrickgold.florisboard.app.settings.formatting.loadEnabled
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -31,16 +33,33 @@ class VoiceInputManager(
 ) {
     private var speechRecognizer: SpeechRecognizer? = null
     private var formattingJob: Job? = null
-    private var isRecording = false
-
-    fun isRecording(): Boolean = isRecording
+    
+    private val _isRecordingFlow = MutableStateFlow(false)
+    val isRecordingFlow = _isRecordingFlow.asStateFlow()
+    
+    private var isRecording: Boolean
+        get() = _isRecordingFlow.value
+        set(value) {
+            _isRecordingFlow.value = value
+        }
 
     fun toggleVoiceInput() {
         if (isRecording) {
-            stopVoiceInput()
+            stopRecording()
         } else {
             startVoiceInput()
         }
+    }
+    
+    private fun stopRecording() {
+        flogInfo(LogTopic.IMS_EVENTS) { "VoiceInputManager.stopRecording() - stopping recording only" }
+        isRecording = false
+        speechRecognizer?.stopListening()
+        speechRecognizer?.destroy()
+        speechRecognizer = null
+        formattingJob?.cancel()
+        formattingJob = null
+        // Don't close the voice panel - just stop recording
     }
 
     fun startVoiceInput() {
@@ -131,10 +150,17 @@ class VoiceInputManager(
                 override fun onPartialResults(partialResults: Bundle) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
+            val selectedLanguage = dev.patrickgold.florisboard.app.settings.formatting.loadLanguage(context)
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                // Use selected language or auto-detect
+                if (selectedLanguage != "auto") {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, selectedLanguage)
+                } else {
+                    // Don't set language to let Google auto-detect
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toString())
+                }
             }
             sr.startListening(intent)
         }
@@ -145,10 +171,15 @@ class VoiceInputManager(
         flogInfo(LogTopic.IMS_EVENTS) { "VoiceInputManager.restartListening()" }
         // Don't call stopListening() - just start listening again directly
         // The recognizer will handle the transition automatically
+        val selectedLanguage = dev.patrickgold.florisboard.app.settings.formatting.loadLanguage(context)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            if (selectedLanguage != "auto") {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, selectedLanguage)
+            } else {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toString())
+            }
         }
         try {
             speechRecognizer?.startListening(intent)
@@ -232,10 +263,15 @@ class VoiceInputManager(
             })
         }
         
+        val selectedLanguage = dev.patrickgold.florisboard.app.settings.formatting.loadLanguage(context)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            if (selectedLanguage != "auto") {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, selectedLanguage)
+            } else {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toString())
+            }
         }
         speechRecognizer?.startListening(intent)
     }
