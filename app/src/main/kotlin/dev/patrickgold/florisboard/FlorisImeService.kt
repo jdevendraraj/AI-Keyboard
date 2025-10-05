@@ -752,7 +752,26 @@ class FlorisImeService : LifecycleInputMethodService() {
                         },
                     ) {
                         if (state.isBottomSheetShowing()) {
-                            QuickActionsEditorPanel()
+                            if (state.isActionsEditorVisible) {
+                                QuickActionsEditorPanel()
+                            }
+                            if (state.isVoiceOverlayVisible) {
+                                val isRecording = keyboardManager.voiceInputManager.isRecording()
+                                dev.patrickgold.florisboard.ime.voice.VoiceOverlayPanel(
+                                    statusText = if (isRecording) "Listening…" else "Tap mic to start",
+                                    isRecording = isRecording,
+                                    onMicClick = {
+                                        keyboardManager.voiceInputManager.toggleVoiceInput()
+                                    },
+                                    onBackClick = {
+                                        keyboardManager.voiceInputManager.stopVoiceInput()
+                                    },
+                                    onDeleteClick = {
+                                        // Delete last word or character
+                                        editorInstance.deleteBackwards(dev.patrickgold.florisboard.ime.editor.OperationUnit.WORDS)
+                                    },
+                                )
+                            }
                         }
                         if (state.isSubtypeSelectionShowing()) {
                             SelectSubtypePanel()

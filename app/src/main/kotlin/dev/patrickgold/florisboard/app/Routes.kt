@@ -177,6 +177,10 @@ object Routes {
         object Other
 
         @Serializable
+        @Deeplink("settings/formatting")
+        object Formatting
+
+        @Serializable
         @Deeplink("settings/other/physical-keyboard")
         object PhysicalKeyboard
 
@@ -315,6 +319,7 @@ object Routes {
             composableWithDeepLink(Settings.Media::class) { MediaScreen() }
 
             composableWithDeepLink(Settings.Other::class) { OtherScreen() }
+            composableWithDeepLink(Settings.Formatting::class) { dev.patrickgold.florisboard.app.settings.formatting.FormattingBackendScreen() }
             composableWithDeepLink(Settings.PhysicalKeyboard::class) { PhysicalKeyboardScreen() }
             composableWithDeepLink(Settings.Backup::class) { BackupScreen() }
             composableWithDeepLink(Settings.Restore::class) { RestoreScreen() }

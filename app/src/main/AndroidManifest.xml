@@ -2,6 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Network access for formatting backend and health check -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Required for in-app speech recognition (POC); if not granted we fallback -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
     <!-- Permission needed to vibrate if the user has key press vibration enabled -->
     <uses-permission android:name="android.permission.VIBRATE"/>
 
