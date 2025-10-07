@@ -76,10 +76,18 @@ class FormatServiceClient(
             val baseUrl = baseUrlProvider()?.trimEnd('/') ?: throw IllegalStateException("No base URL configured")
             val apiKey = apiKeyProvider() ?: throw IllegalStateException("No API key configured")
 
+            Log.d("FormatServiceClient", "=== FORMAT TRANSCRIPT START ===")
+            Log.d("FormatServiceClient", "Base URL: $baseUrl")
+            Log.d("FormatServiceClient", "API Key: ${apiKey.take(8)}...")
+            Log.d("FormatServiceClient", "Transcript length: ${transcript.length}")
+            Log.d("FormatServiceClient", "Request ID: $requestId")
+
             val bodyObj = FormatRequest(transcript = transcript, requestId = requestId)
             val body = json.encodeToString(bodyObj).toRequestBody(jsonMedia)
 
             val url = "$baseUrl/api/format"
+            Log.d("FormatServiceClient", "Full URL: $url")
+            
             val req = Request.Builder()
                 .url(url)
                 .addHeader("Content-Type", "application/json")
@@ -88,8 +96,15 @@ class FormatServiceClient(
                 .post(body)
                 .build()
 
+            Log.d("FormatServiceClient", "Request built, executing...")
+
             executeWithRetry(req) { respBody ->
-                json.decodeFromString(FormatResponse.serializer(), respBody)
+                Log.d("FormatServiceClient", "Response received, parsing...")
+                Log.d("FormatServiceClient", "Response body: $respBody")
+                val result = json.decodeFromString(FormatResponse.serializer(), respBody)
+                Log.d("FormatServiceClient", "Parsed result: $result")
+                Log.d("FormatServiceClient", "=== FORMAT TRANSCRIPT END ===")
+                result
             }
         }
 
@@ -128,16 +143,40 @@ class FormatServiceClient(
     override suspend fun healthCheck(): Boolean = withContext(Dispatchers.IO) {
         val baseUrl = baseUrlProvider()?.trimEnd('/') ?: return@withContext false
         val url = "$baseUrl/health"
+        
+        Log.d("FormatServiceClient", "=== HEALTH CHECK START ===")
+        Log.d("FormatServiceClient", "Base URL: $baseUrl")
+        Log.d("FormatServiceClient", "Full URL: $url")
+        
         val req = Request.Builder()
             .url(url)
             .addHeader("ngrok-skip-browser-warning", "true")
             .get()
             .build()
+            
+        Log.d("FormatServiceClient", "Request built, executing...")
+        
         return@withContext try {
             client.newCall(req).execute().use { resp ->
-                resp.isSuccessful
+                Log.d("FormatServiceClient", "Response received:")
+                Log.d("FormatServiceClient", "  Status Code: ${resp.code}")
+                Log.d("FormatServiceClient", "  Message: ${resp.message}")
+                Log.d("FormatServiceClient", "  Headers: ${resp.headers}")
+                
+                val body = resp.body?.string() ?: ""
+                Log.d("FormatServiceClient", "  Body: $body")
+                
+                val isSuccessful = resp.isSuccessful
+                Log.d("FormatServiceClient", "  Is Successful: $isSuccessful")
+                Log.d("FormatServiceClient", "=== HEALTH CHECK END ===")
+                
+                isSuccessful
             }
         } catch (t: Throwable) {
+            Log.e("FormatServiceClient", "Health check failed with exception", t)
+            Log.e("FormatServiceClient", "Exception message: ${t.message}")
+            Log.e("FormatServiceClient", "Exception type: ${t.javaClass.simpleName}")
+            Log.e("FormatServiceClient", "=== HEALTH CHECK END (ERROR) ===")
             false
         }
     }
@@ -148,29 +187,41 @@ class FormatServiceClient(
     ): T {
         var attempt = 0
         var lastError: Throwable? = null
+        Log.d("FormatServiceClient", "Starting executeWithRetry, max attempts: 2")
+        
         while (attempt < 2) {
             try {
+                Log.d("FormatServiceClient", "Attempt ${attempt + 1}/2")
                 client.newCall(request).execute().use { resp ->
                     val body = resp.body?.string() ?: ""
+                    Log.d("FormatServiceClient", "Response - Code: ${resp.code}, Body: $body")
+                    
                     if (resp.isSuccessful) {
+                        Log.d("FormatServiceClient", "Request successful, parsing response")
                         return parser(body)
                     }
                     if (resp.code in 500..599) {
+                        Log.e("FormatServiceClient", "Server error: ${resp.code}")
                         throw RuntimeException("Server error: ${resp.code}")
                     } else if (resp.code == 401) {
+                        Log.e("FormatServiceClient", "Authentication error: ${resp.code}")
                         throw AuthException()
                     } else {
+                        Log.e("FormatServiceClient", "HTTP error: ${resp.code}")
                         throw RuntimeException("HTTP ${resp.code}")
                     }
                 }
             } catch (t: Throwable) {
                 lastError = t
                 attempt += 1
+                Log.e("FormatServiceClient", "Attempt ${attempt} failed: ${t.message}")
                 if (attempt >= 2) break
+                Log.d("FormatServiceClient", "Retrying in 200ms...")
                 // small backoff
                 delay(200)
             }
         }
+        Log.e("FormatServiceClient", "All attempts failed, throwing last error")
         throw lastError ?: RuntimeException("Unknown error")
     }
 

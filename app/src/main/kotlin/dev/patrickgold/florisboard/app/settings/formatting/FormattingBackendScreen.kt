@@ -1,6 +1,7 @@
 package dev.patrickgold.florisboard.app.settings.formatting
 
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -212,22 +213,102 @@ fun FormattingBackendScreen() = FlorisScreen {
                 summary = "Verify backend health",
                 onClick = {
                     scope.launch {
-            val client = FormatServiceClient(
-                baseUrlProvider = { loadBaseUrl(context) },
-                apiKeyProvider = { loadApiKey(context) },
-            )
+                        val baseUrl = loadBaseUrl(context)
+                        val apiKey = loadApiKey(context)
+                        
+                        Log.d("FormattingBackend", "=== TEST CONNECTION START ===")
+                        Log.d("FormattingBackend", "Base URL: $baseUrl")
+                        Log.d("FormattingBackend", "API Key: ${apiKey?.take(8)}...")
+                        Log.d("FormattingBackend", "Base URL is null: ${baseUrl == null}")
+                        Log.d("FormattingBackend", "API Key is null: ${apiKey == null}")
+                        
+                        if (baseUrl == null) {
+                            Log.e("FormattingBackend", "ERROR: Base URL is null!")
+                            Toast.makeText(context, "✗ ERROR: Base URL not configured", Toast.LENGTH_LONG).show()
+                            return@launch
+                        }
+                        
+                        if (apiKey == null) {
+                            Log.e("FormattingBackend", "ERROR: API Key is null!")
+                            Toast.makeText(context, "✗ ERROR: API Key not configured", Toast.LENGTH_LONG).show()
+                            return@launch
+                        }
+                        
+                        val client = FormatServiceClient(
+                            baseUrlProvider = { loadBaseUrl(context) },
+                            apiKeyProvider = { loadApiKey(context) },
+                        )
+                        
+                        Log.d("FormattingBackend", "Client created, starting health check...")
+                        
                         val ok = withContext(Dispatchers.IO) {
                             try {
-                                client.healthCheck()
+                                Log.d("FormattingBackend", "Calling client.healthCheck()...")
+                                val result = client.healthCheck()
+                                Log.d("FormattingBackend", "Health check result: $result")
+                                result
                             } catch (e: Exception) {
+                                Log.e("FormattingBackend", "Health check failed with exception", e)
+                                Log.e("FormattingBackend", "Exception message: ${e.message}")
+                                Log.e("FormattingBackend", "Exception type: ${e.javaClass.simpleName}")
                                 false
                             }
                         }
+                        
+                        Log.d("FormattingBackend", "Final result: $ok")
+                        Log.d("FormattingBackend", "=== TEST CONNECTION END ===")
+                        
                         Toast.makeText(
                             context,
-                            if (ok) "✓ Connection successful" else "✗ Connection failed",
-                            Toast.LENGTH_SHORT
+                            if (ok) "✓ Connection successful" else "✗ Connection failed - Check logs",
+                            Toast.LENGTH_LONG
                         ).show()
+                    }
+                }
+            )
+            
+            Preference(
+                title = "Test Format API",
+                summary = "Test format endpoint with sample text",
+                onClick = {
+                    scope.launch {
+                        val baseUrl = loadBaseUrl(context)
+                        val apiKey = loadApiKey(context)
+                        
+                        Log.d("FormattingBackend", "=== TEST FORMAT API START ===")
+                        Log.d("FormattingBackend", "Base URL: $baseUrl")
+                        Log.d("FormattingBackend", "API Key: ${apiKey?.take(8)}...")
+                        
+                        if (baseUrl == null || apiKey == null) {
+                            Log.e("FormattingBackend", "ERROR: Configuration missing!")
+                            Toast.makeText(context, "✗ ERROR: Configuration missing", Toast.LENGTH_LONG).show()
+                            return@launch
+                        }
+                        
+                        val client = FormatServiceClient(
+                            baseUrlProvider = { loadBaseUrl(context) },
+                            apiKeyProvider = { loadApiKey(context) },
+                        )
+                        
+                        val testText = "hello world this is a test"
+                        Log.d("FormattingBackend", "Testing with text: $testText")
+                        
+                        val result = withContext(Dispatchers.IO) {
+                            try {
+                                val response = client.formatTranscript(testText, "test-request-123")
+                                Log.d("FormattingBackend", "Format API result: $response")
+                                "✓ Format API successful: ${response.formattedText}"
+                            } catch (e: Exception) {
+                                Log.e("FormattingBackend", "Format API failed with exception", e)
+                                Log.e("FormattingBackend", "Exception message: ${e.message}")
+                                Log.e("FormattingBackend", "Exception type: ${e.javaClass.simpleName}")
+                                "✗ Format API failed: ${e.message}"
+                            }
+                        }
+                        
+                        Log.d("FormattingBackend", "=== TEST FORMAT API END ===")
+                        
+                        Toast.makeText(context, result, Toast.LENGTH_LONG).show()
                     }
                 }
             )

@@ -132,7 +132,7 @@ export const transcribeChirpHandler = async (req: Request, res: Response) => {
       formattingApplied: enableFormatting
     });
 
-    res.json(response);
+    return res.json(response);
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

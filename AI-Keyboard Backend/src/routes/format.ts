@@ -119,7 +119,7 @@ router.post('/format', async (req: AuthenticatedRequest, res: Response) => {
       usage: llmResponse.usage
     });
 
-    res.json(response);
+    return res.json(response);
 
   } catch (error) {
     const duration = Date.now() - startTime;
@@ -147,7 +147,7 @@ router.post('/format', async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to format transcript'
     });
