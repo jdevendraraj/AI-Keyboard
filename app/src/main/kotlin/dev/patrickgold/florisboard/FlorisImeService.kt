@@ -677,9 +677,15 @@ class FlorisImeService : LifecycleInputMethodService() {
                         ) {
                             if (state.isVoiceOverlayVisible) {
                                 val isRecording by keyboardManager.voiceInputManager.isRecordingFlow.collectAsState()
+                                val isProcessing by keyboardManager.voiceInputManager.isProcessingFlow.collectAsState()
                                 dev.patrickgold.florisboard.ime.voice.VoiceOverlayPanel(
-                                    statusText = if (isRecording) "Listening…" else "Tap mic to start",
+                                    statusText = when {
+                                        isProcessing -> "Processing…"
+                                        isRecording -> "Listening…"
+                                        else -> "Tap mic to start"
+                                    },
                                     isRecording = isRecording,
+                                    isProcessing = isProcessing,
                                     onMicClick = {
                                         keyboardManager.voiceInputManager.toggleVoiceInput()
                                     },

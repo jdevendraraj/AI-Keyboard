@@ -41,6 +41,7 @@ private const val KEY_BASE_URL = "formatting_base_url"
 private const val KEY_API_KEY = "formatting_api_key"
 private const val KEY_ENABLE = "formatting_enable_voice"
 private const val KEY_LANGUAGE = "formatting_voice_language"
+private const val KEY_VOICE_SOURCE = "formatting_voice_source"
 
 @Composable
 fun FormattingBackendScreen() = FlorisScreen {
@@ -54,32 +55,117 @@ fun FormattingBackendScreen() = FlorisScreen {
     var apiKey by remember { mutableStateOf(loadApiKey(context) ?: "") }
     var enabled by remember { mutableStateOf(loadEnabled(context)) }
     var selectedLanguage by remember { mutableStateOf(loadLanguage(context)) }
+    var voiceSource by remember { mutableStateOf(loadVoiceSource(context)) }
     
     var showBaseUrlDialog by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showVoiceSourceDialog by remember { mutableStateOf(false) }
     
     val languageOptions = listOf(
         "auto" to "Auto-detect",
         "en-US" to "English (US)",
         "en-GB" to "English (UK)",
+        "en-AU" to "English (Australia)",
+        "en-CA" to "English (Canada)",
+        "en-IN" to "English (India)",
+        "en-NZ" to "English (New Zealand)",
         "es-ES" to "Spanish (Spain)",
         "es-MX" to "Spanish (Mexico)",
-        "fr-FR" to "French",
-        "de-DE" to "German",
-        "it-IT" to "Italian",
+        "es-AR" to "Spanish (Argentina)",
+        "es-CL" to "Spanish (Chile)",
+        "es-CO" to "Spanish (Colombia)",
+        "es-PE" to "Spanish (Peru)",
+        "es-VE" to "Spanish (Venezuela)",
+        "fr-FR" to "French (France)",
+        "fr-CA" to "French (Canada)",
+        "fr-BE" to "French (Belgium)",
+        "fr-CH" to "French (Switzerland)",
+        "de-DE" to "German (Germany)",
+        "de-AT" to "German (Austria)",
+        "de-CH" to "German (Switzerland)",
+        "it-IT" to "Italian (Italy)",
+        "it-CH" to "Italian (Switzerland)",
         "pt-BR" to "Portuguese (Brazil)",
         "pt-PT" to "Portuguese (Portugal)",
-        "ru-RU" to "Russian",
-        "ja-JP" to "Japanese",
-        "ko-KR" to "Korean",
+        "ru-RU" to "Russian (Russia)",
+        "ja-JP" to "Japanese (Japan)",
+        "ko-KR" to "Korean (South Korea)",
         "zh-CN" to "Chinese (Simplified)",
         "zh-TW" to "Chinese (Traditional)",
-        "ar-SA" to "Arabic",
-        "hi-IN" to "Hindi",
-        "tr-TR" to "Turkish",
-        "pl-PL" to "Polish",
-        "nl-NL" to "Dutch",
+        "zh-HK" to "Chinese (Hong Kong)",
+        "ar-SA" to "Arabic (Saudi Arabia)",
+        "ar-EG" to "Arabic (Egypt)",
+        "ar-AE" to "Arabic (UAE)",
+        "hi-IN" to "Hindi (India)",
+        "tr-TR" to "Turkish (Turkey)",
+        "pl-PL" to "Polish (Poland)",
+        "nl-NL" to "Dutch (Netherlands)",
+        "nl-BE" to "Dutch (Belgium)",
+        "sv-SE" to "Swedish (Sweden)",
+        "no-NO" to "Norwegian (Norway)",
+        "da-DK" to "Danish (Denmark)",
+        "fi-FI" to "Finnish (Finland)",
+        "cs-CZ" to "Czech (Czech Republic)",
+        "hu-HU" to "Hungarian (Hungary)",
+        "ro-RO" to "Romanian (Romania)",
+        "bg-BG" to "Bulgarian (Bulgaria)",
+        "hr-HR" to "Croatian (Croatia)",
+        "sk-SK" to "Slovak (Slovakia)",
+        "sl-SI" to "Slovenian (Slovenia)",
+        "et-EE" to "Estonian (Estonia)",
+        "lv-LV" to "Latvian (Latvia)",
+        "lt-LT" to "Lithuanian (Lithuania)",
+        "uk-UA" to "Ukrainian (Ukraine)",
+        "el-GR" to "Greek (Greece)",
+        "he-IL" to "Hebrew (Israel)",
+        "th-TH" to "Thai (Thailand)",
+        "vi-VN" to "Vietnamese (Vietnam)",
+        "id-ID" to "Indonesian (Indonesia)",
+        "ms-MY" to "Malay (Malaysia)",
+        "tl-PH" to "Filipino (Philippines)",
+        "ca-ES" to "Catalan (Spain)",
+        "eu-ES" to "Basque (Spain)",
+        "gl-ES" to "Galician (Spain)",
+        "is-IS" to "Icelandic (Iceland)",
+        "mt-MT" to "Maltese (Malta)",
+        "cy-GB" to "Welsh (United Kingdom)",
+        "ga-IE" to "Irish (Ireland)",
+        "sq-AL" to "Albanian (Albania)",
+        "mk-MK" to "Macedonian (Macedonia)",
+        "sr-RS" to "Serbian (Serbia)",
+        "bs-BA" to "Bosnian (Bosnia)",
+        "me-ME" to "Montenegrin (Montenegro)",
+        "af-ZA" to "Afrikaans (South Africa)",
+        "sw-KE" to "Swahili (Kenya)",
+        "am-ET" to "Amharic (Ethiopia)",
+        "az-AZ" to "Azerbaijani (Azerbaijan)",
+        "be-BY" to "Belarusian (Belarus)",
+        "bn-BD" to "Bengali (Bangladesh)",
+        "bn-IN" to "Bengali (India)",
+        "gu-IN" to "Gujarati (India)",
+        "kn-IN" to "Kannada (India)",
+        "ml-IN" to "Malayalam (India)",
+        "mr-IN" to "Marathi (India)",
+        "ne-NP" to "Nepali (Nepal)",
+        "pa-IN" to "Punjabi (India)",
+        "si-LK" to "Sinhala (Sri Lanka)",
+        "ta-IN" to "Tamil (India)",
+        "te-IN" to "Telugu (India)",
+        "ur-PK" to "Urdu (Pakistan)",
+        "ka-GE" to "Georgian (Georgia)",
+        "hy-AM" to "Armenian (Armenia)",
+        "kk-KZ" to "Kazakh (Kazakhstan)",
+        "ky-KG" to "Kyrgyz (Kyrgyzstan)",
+        "mn-MN" to "Mongolian (Mongolia)",
+        "uz-UZ" to "Uzbek (Uzbekistan)",
+        "tg-TJ" to "Tajik (Tajikistan)",
+        "tk-TM" to "Turkmen (Turkmenistan)",
+    )
+    
+    val voiceSourceOptions = listOf(
+        "device" to "Device (local STT)",
+        "chirp" to "Chirp (cloud STT)"
     )
 
     content {
@@ -97,6 +183,11 @@ fun FormattingBackendScreen() = FlorisScreen {
         }
 
         PreferenceGroup(title = "Voice Recognition") {
+            Preference(
+                title = "Voice to Text Source",
+                summary = voiceSourceOptions.find { it.first == voiceSource }?.second ?: "Device (local STT)",
+                onClick = { showVoiceSourceDialog = true }
+            )
             Preference(
                 title = "Recognition Language",
                 summary = languageOptions.find { it.first == selectedLanguage }?.second ?: "Auto-detect",
@@ -169,6 +260,20 @@ fun FormattingBackendScreen() = FlorisScreen {
                 apiKey = it
                 saveApiKey(context, it)
                 showApiKeyDialog = false
+            }
+        )
+    }
+    
+    if (showVoiceSourceDialog) {
+        ListSelectionDialog(
+            title = "Select Voice to Text Source",
+            options = voiceSourceOptions,
+            selectedValue = voiceSource,
+            onDismiss = { showVoiceSourceDialog = false },
+            onSelect = { source ->
+                voiceSource = source
+                saveVoiceSource(context, source)
+                showVoiceSourceDialog = false
             }
         )
     }
@@ -294,5 +399,8 @@ fun saveEnabled(context: Context, v: Boolean) { prefs(context).edit().putBoolean
 
 fun loadLanguage(context: Context): String = prefs(context).getString(KEY_LANGUAGE, "auto") ?: "auto"
 fun saveLanguage(context: Context, v: String) { prefs(context).edit().putString(KEY_LANGUAGE, v).apply() }
+
+fun loadVoiceSource(context: Context): String = prefs(context).getString(KEY_VOICE_SOURCE, "device") ?: "device"
+fun saveVoiceSource(context: Context, v: String) { prefs(context).edit().putString(KEY_VOICE_SOURCE, v).apply() }
 
 

@@ -5,6 +5,10 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +25,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -29,6 +34,8 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.patrickgold.florisboard.FlorisImeService
 import dev.patrickgold.florisboard.ime.theme.FlorisImeUi
@@ -46,6 +53,7 @@ import org.florisboard.lib.snygg.ui.SnyggText
 fun VoiceOverlayPanel(
     statusText: String,
     isRecording: Boolean = false,
+    isProcessing: Boolean = false,
     onMicClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
     onDeleteClick: () -> Unit = {},
@@ -182,10 +190,30 @@ fun VoiceOverlayPanel(
                         )
                     }
                     
+                    // Processing spinner (overlay around the button)
+                    if (isProcessing) {
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = isProcessing,
+                            enter = fadeIn() + scaleIn(),
+                            exit = fadeOut() + scaleOut(),
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(100.dp)
+                                    .semantics {
+                                        contentDescription = "Processing voice input"
+                                    },
+                                strokeWidth = 4.dp,
+                                color = Color(0xFF00D4FF),
+                            )
+                        }
+                    }
+                    
                     // Main button
                     SnyggButton(
                         elementName = FlorisImeUi.SmartbarSharedActionsToggle.elementName,
                         onClick = onMicClick,
+                        enabled = !isProcessing, // Disable button while processing
                         modifier = Modifier
                             .size(86.dp)
                             .then(

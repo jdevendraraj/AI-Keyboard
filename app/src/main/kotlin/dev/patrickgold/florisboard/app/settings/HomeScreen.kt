@@ -106,6 +106,7 @@ fun HomeScreen() = FlorisScreen {
                 }
             }
         }*/
+
         Preference(
             icon = Icons.Default.Language,
             title = stringRes(R.string.settings__localization__title),
