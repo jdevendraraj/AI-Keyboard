@@ -78,6 +78,7 @@ fun SetupScreen() = FlorisScreen {
     val isFlorisBoardEnabled by InputMethodUtils.observeIsFlorisboardEnabled(foregroundOnly = true)
     val isFlorisBoardSelected by InputMethodUtils.observeIsFlorisboardSelected(foregroundOnly = true)
     val hasNotificationPermission by prefs.internal.notificationPermissionState.observeAsState()
+    val hasMicrophonePermission by prefs.internal.microphonePermissionState.observeAsState()
 
     val requestNotification =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -90,6 +91,17 @@ fun SetupScreen() = FlorisScreen {
             }
         }
 
+    val requestMicrophone =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            scope.launch {
+                if (isGranted) {
+                    prefs.internal.microphonePermissionState.set(MicrophonePermissionState.GRANTED)
+                } else {
+                    prefs.internal.microphonePermissionState.set(MicrophonePermissionState.DENIED)
+                }
+            }
+        }
+
     content(
         isFlorisBoardEnabled,
         isFlorisBoardSelected,
@@ -97,6 +109,8 @@ fun SetupScreen() = FlorisScreen {
         navController,
         requestNotification,
         hasNotificationPermission,
+        requestMicrophone,
+        hasMicrophonePermission,
         scope,
     )
 }
@@ -109,6 +123,8 @@ private fun FlorisScreenScope.content(
     navController: NavController,
     requestNotification: ManagedActivityResultLauncher<String, Boolean>,
     hasNotificationPermission: NotificationPermissionState,
+    requestMicrophone: ManagedActivityResultLauncher<String, Boolean>,
+    hasMicrophonePermission: MicrophonePermissionState,
     scope: CoroutineScope,
 ) {
 
@@ -117,18 +133,20 @@ private fun FlorisScreenScope.content(
             !isFlorisBoardEnabled -> Steps.EnableIme.id
             !isFlorisBoardSelected -> Steps.SelectIme.id
             hasNotificationPermission == NotificationPermissionState.NOT_SET && AndroidVersion.ATLEAST_API33_T -> Steps.SelectNotification.id
+            hasMicrophonePermission == MicrophonePermissionState.NOT_SET -> Steps.SelectMicrophone.id
             else -> Steps.FinishUp.id
         }
         FlorisStepState.new(init = initStep)
     }
 
     content {
-        LaunchedEffect(isFlorisBoardEnabled, isFlorisBoardSelected, hasNotificationPermission) {
+        LaunchedEffect(isFlorisBoardEnabled, isFlorisBoardSelected, hasNotificationPermission, hasMicrophonePermission) {
             stepState.setCurrentAuto(
                 when {
                     !isFlorisBoardEnabled -> Steps.EnableIme.id
                     !isFlorisBoardSelected -> Steps.SelectIme.id
                     hasNotificationPermission == NotificationPermissionState.NOT_SET && AndroidVersion.ATLEAST_API33_T -> Steps.SelectNotification.id
+                    hasMicrophonePermission == MicrophonePermissionState.NOT_SET -> Steps.SelectMicrophone.id
                     else -> Steps.FinishUp.id
                 }
             )
@@ -165,7 +183,7 @@ private fun FlorisScreenScope.content(
                 Spacer(modifier = Modifier.height(16.dp))
             },
             steps = steps(
-                context, navController, requestNotification, scope
+                context, navController, requestNotification, requestMicrophone, scope
             ),
             footer = {
                 footer(context)
@@ -200,6 +218,7 @@ private fun PreferenceUiScope<FlorisPreferenceModel>.steps(
     context: Context,
     navController: NavController,
     requestNotification: ManagedActivityResultLauncher<String, Boolean>,
+    requestMicrophone: ManagedActivityResultLauncher<String, Boolean>,
     scope: CoroutineScope,
 ): List<FlorisStep> {
 
@@ -234,6 +253,15 @@ private fun PreferenceUiScope<FlorisPreferenceModel>.steps(
             }
         } else null,
         FlorisStep(
+            id = Steps.SelectMicrophone.id,
+            title = stringRes(R.string.setup__grant_microphone_permission__title),
+        ) {
+            StepText(stringRes(R.string.setup__grant_microphone_permission__description))
+            StepButton(stringRes(R.string.setup__grant_microphone_permission__btn)) {
+                requestMicrophone.launch(android.Manifest.permission.RECORD_AUDIO)
+            }
+        },
+        FlorisStep(
             id = Steps.FinishUp.id,
             title = stringRes(R.string.setup__finish_up__title),
         ) {
@@ -255,5 +283,6 @@ private sealed class Steps(val id: Int) {
     data object EnableIme : Steps(id = 1)
     data object SelectIme : Steps(id = 2)
     data object SelectNotification : Steps(id = 3)
-    data object FinishUp : Steps(id = 4)
+    data object SelectMicrophone : Steps(id = 4)
+    data object FinishUp : Steps(id = 5)
 }

@@ -27,3 +27,15 @@
 
 # @Serializable and @Polymorphic are used at runtime for polymorphic serialization.
 -keepattributes RuntimeVisibleAnnotations,AnnotationDefault
+
+# Google Tink rules
+-keep class com.google.crypto.tink.** { *; }
+-keep class com.google.errorprone.annotations.** { *; }
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn com.google.crypto.tink.**
+
+# Keep Tink classes that are referenced at runtime
+-keep class com.google.crypto.tink.KeysetManager { *; }
+-keep class com.google.crypto.tink.InsecureSecretKeyAccess { *; }
+-keep class com.google.crypto.tink.aead.AesEaxKey { *; }
+-keep class com.google.crypto.tink.aead.AesEaxKey$Builder { *; }
