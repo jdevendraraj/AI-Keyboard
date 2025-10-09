@@ -40,13 +40,22 @@ class AudioRecorder(private val context: Context) {
             audioFormat
         ) * 2
         
-        audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            sampleRate,
-            channelConfig,
-            audioFormat,
-            bufferSize
-        )
+        try {
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                sampleRate,
+                channelConfig,
+                audioFormat,
+                bufferSize
+            )
+            
+            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                throw IllegalStateException("AudioRecord failed to initialize")
+            }
+        } catch (e: Exception) {
+            Log.e("AudioRecorder", "Failed to create AudioRecord", e)
+            throw e
+        }
         
         val audioFile = File(tempDir, "recording_${UUID.randomUUID()}.wav")
         isRecording = true
@@ -83,7 +92,7 @@ class AudioRecorder(private val context: Context) {
         return audioFile
     }
     
-    fun stopRecording(): File? {
+    suspend fun stopRecording(): File? {
         if (!isRecording) {
             return null
         }
@@ -92,9 +101,7 @@ class AudioRecorder(private val context: Context) {
         recordingJob?.cancel()
         
         // Wait a bit for the recording to finish
-        runBlocking {
-            delay(100)
-        }
+        delay(100)
         
         // Find the most recent recording file
         val files = tempDir.listFiles { _, name -> name.startsWith("recording_") && name.endsWith(".wav") }

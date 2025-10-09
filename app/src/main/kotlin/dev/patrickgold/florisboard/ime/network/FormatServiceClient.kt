@@ -69,6 +69,17 @@ class FormatServiceClient(
         .readTimeout(chirpTimeoutSeconds, TimeUnit.SECONDS)
         .build()
 
+    // Store active calls for cancellation
+    private val activeCalls = mutableMapOf<String, okhttp3.Call>()
+
+    /**
+     * Cancel an active request by requestId
+     */
+    fun cancel(requestId: String) {
+        activeCalls[requestId]?.cancel()
+        activeCalls.remove(requestId)
+    }
+
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
     override suspend fun formatTranscript(transcript: String, requestId: String?): FormatResponse =
@@ -98,7 +109,7 @@ class FormatServiceClient(
 
             Log.d("FormatServiceClient", "Request built, executing...")
 
-            executeWithRetry(req) { respBody ->
+            executeWithRetry(req, requestId) { respBody ->
                 Log.d("FormatServiceClient", "Response received, parsing...")
                 Log.d("FormatServiceClient", "Response body: $respBody")
                 val result = json.decodeFromString(FormatResponse.serializer(), respBody)
@@ -134,7 +145,7 @@ class FormatServiceClient(
                 .build()
 
             Log.d("FormatServiceClient", "transcribeWithChirp - About to execute request")
-            executeWithRetryChirp(req) { respBody ->
+            executeWithRetryChirp(req, requestId) { respBody ->
                 Log.d("FormatServiceClient", "transcribeWithChirp - Received response, parsing...")
                 json.decodeFromString(ChirpTranscribeResponse.serializer(), respBody)
             }
@@ -183,6 +194,7 @@ class FormatServiceClient(
 
     private suspend fun <T> executeWithRetry(
         request: Request,
+        requestId: String?,
         parser: (String) -> T,
     ): T {
         var attempt = 0
@@ -192,7 +204,14 @@ class FormatServiceClient(
         while (attempt < 2) {
             try {
                 Log.d("FormatServiceClient", "Attempt ${attempt + 1}/2")
-                client.newCall(request).execute().use { resp ->
+                val call = client.newCall(request)
+                
+                // Store the call for potential cancellation
+                if (requestId != null) {
+                    activeCalls[requestId] = call
+                }
+                
+                call.execute().use { resp ->
                     val body = resp.body?.string() ?: ""
                     Log.d("FormatServiceClient", "Response - Code: ${resp.code}, Body: $body")
                     
@@ -219,6 +238,11 @@ class FormatServiceClient(
                 Log.d("FormatServiceClient", "Retrying in 200ms...")
                 // small backoff
                 delay(200)
+            } finally {
+                // Remove the call from active calls
+                if (requestId != null) {
+                    activeCalls.remove(requestId)
+                }
             }
         }
         Log.e("FormatServiceClient", "All attempts failed, throwing last error")
@@ -227,13 +251,19 @@ class FormatServiceClient(
 
     private suspend fun <T> executeWithRetryChirp(
         request: Request,
+        requestId: String,
         parser: (String) -> T,
     ): T {
         var attempt = 0
         var lastError: Throwable? = null
         while (attempt < 2) {
             try {
-                chirpClient.newCall(request).execute().use { resp ->
+                val call = chirpClient.newCall(request)
+                
+                // Store the call for potential cancellation
+                activeCalls[requestId] = call
+                
+                call.execute().use { resp ->
                     val body = resp.body?.string() ?: ""
                     if (resp.isSuccessful) {
                         return parser(body)
@@ -252,6 +282,9 @@ class FormatServiceClient(
                 if (attempt >= 2) break
                 // small backoff
                 delay(200)
+            } finally {
+                // Remove the call from active calls
+                activeCalls.remove(requestId)
             }
         }
         throw lastError ?: RuntimeException("Unknown error")

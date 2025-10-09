@@ -44,40 +44,171 @@ class VoiceInputManager(
     private var audioRecorder: AudioRecorder? = null
     private var recordingFile: File? = null
     
-    private val _isRecordingFlow = MutableStateFlow(false)
-    val isRecordingFlow = _isRecordingFlow.asStateFlow()
+    // Inline voice recording controller
+    val inlineRecorderController = InlineVoiceRecorderController(context, scope)
     
-    private val _isProcessingFlow = MutableStateFlow(false)
-    val isProcessingFlow = _isProcessingFlow.asStateFlow()
+    // Legacy flows for backward compatibility - now derived from inline controller
+    val isRecordingFlow = inlineRecorderController.isRecording
+    val isProcessingFlow = inlineRecorderController.isProcessing
     
+    // Legacy properties for backward compatibility
     private var isRecording: Boolean
-        get() = _isRecordingFlow.value
+        get() = inlineRecorderController.isRecording.value
         set(value) {
-            _isRecordingFlow.value = value
+            // This is now managed by the state machine
+            flogInfo(LogTopic.IMS_EVENTS) { "isRecording setter called with $value - this is now managed by state machine" }
         }
     
     private var isProcessing: Boolean
-        get() = _isProcessingFlow.value
+        get() = inlineRecorderController.isProcessing.value
         set(value) {
-            _isProcessingFlow.value = value
+            // This is now managed by the state machine
+            flogInfo(LogTopic.IMS_EVENTS) { "isProcessing setter called with $value - this is now managed by state machine" }
         }
 
     fun toggleVoiceInput() {
-        if (isRecording) {
-            stopRecording()
-        } else {
-            startVoiceInput()
+        val currentState = inlineRecorderController.currentState.value
+        when (currentState) {
+            InlineVoiceRecorderController.RecorderState.IDLE -> {
+                startInlineVoiceInput()
+            }
+            InlineVoiceRecorderController.RecorderState.RECORDING -> {
+                val requestId = inlineRecorderController.currentRequestId.value
+                if (requestId != null) {
+                    stopInlineRecording(requestId)
+                }
+            }
+            InlineVoiceRecorderController.RecorderState.PROCESSING -> {
+                // Do nothing - user should use cancel button
+            }
+            InlineVoiceRecorderController.RecorderState.CANCELLING -> {
+                // Do nothing - already cancelling
+            }
         }
+    }
+
+    /**
+     * Start inline voice recording - replaces toolbar with recording UI
+     */
+    fun startInlineVoiceInput(): String? {
+        flogInfo(LogTopic.IMS_EVENTS) { "VoiceInputManager.startInlineVoiceInput()" }
+        
+        // Runtime mic permission guard
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            context.showShortToastSync("Microphone permission required. Enable in Settings.")
+            flogInfo(LogTopic.IMS_EVENTS) { "RECORD_AUDIO not granted" }
+            return null
+        }
+        
+        val requestId = inlineRecorderController.startInlineRecording()
+        val voiceSource = loadVoiceSource(context)
+        flogInfo(LogTopic.IMS_EVENTS) { "Voice source: $voiceSource" }
+        
+        // Language label will be updated automatically by InlineVoiceToolbar
+        
+        // Delay heavy operations to let UI update first
+        scope.launch(Dispatchers.Main) {
+            try {
+                delay(100) // Give UI time to recompose and show toolbar
+                flogInfo(LogTopic.IMS_EVENTS) { "Starting delayed voice recording setup" }
+                
+                // Check if we're still in recording state (user might have cancelled)
+                if (!inlineRecorderController.isRecording.value) {
+                    flogInfo(LogTopic.IMS_EVENTS) { "Recording was cancelled during delay, aborting" }
+                    return@launch
+                }
+                
+        if (voiceSource == "chirp") {
+                    try {
+            startChirpRecording()
+                    } catch (e: Exception) {
+                        flogInfo(LogTopic.IMS_EVENTS) { "Failed to start inline Chirp recording: ${e.message}" }
+                        inlineRecorderController.cancelRecording()
+                        Toast.makeText(context, "Failed to start recording", Toast.LENGTH_SHORT).show()
+                    }
+        } else {
+                    flogInfo(LogTopic.IMS_EVENTS) { "About to start device recording" }
+            startDeviceRecording()
+                }
+            } catch (e: Exception) {
+                flogInfo(LogTopic.IMS_EVENTS) { "Error in delayed voice recording setup: ${e.message}" }
+                inlineRecorderController.cancelRecording()
+                Toast.makeText(context, "Failed to start voice recording", Toast.LENGTH_SHORT).show()
+            }
+        }
+        
+        return requestId
+    }
+
+    /**
+     * Stop inline recording and start processing
+     */
+    fun stopInlineRecording(requestId: String) {
+        flogInfo(LogTopic.IMS_EVENTS) { "VoiceInputManager.stopInlineRecording() - requestId: $requestId" }
+        
+        val voiceSource = loadVoiceSource(context)
+        if (voiceSource == "chirp") {
+            stopChirpRecordingInline(requestId)
+        } else {
+            cleanupRecognizer()
+            // Transition to idle state instead of cancelling
+            inlineRecorderController.transitionToIdle()
+        }
+    }
+
+    /**
+     * Cancel inline recording and restore toolbar
+     */
+    fun cancelInlineRecording() {
+        flogInfo(LogTopic.IMS_EVENTS) { "VoiceInputManager.cancelInlineRecording()" }
+        
+        val requestId = inlineRecorderController.currentRequestId.value
+        inlineRecorderController.cancelRecording()
+        
+        // Stop any ongoing recording
+        isRecording = false
+        cleanupRecognizer()
+        audioRecorder?.cleanup()
+        audioRecorder = null
+        recordingFile = null
+        
+        // Cancel any pending formatting job
+        formattingJob?.cancel()
+        formattingJob = null
+    }
+
+    /**
+     * Cancel inline processing
+     */
+    fun cancelInlineProcessing() {
+        flogInfo(LogTopic.IMS_EVENTS) { "VoiceInputManager.cancelInlineProcessing()" }
+        
+        val requestId = inlineRecorderController.currentRequestId.value
+        if (requestId != null) {
+            // Cancel the network request
+            val client = FormatServiceClient(
+                baseUrlProvider = { loadBaseUrl(context) },
+                apiKeyProvider = { loadApiKey(context) },
+            )
+            client.cancel(requestId)
+        }
+        
+        inlineRecorderController.cancelProcessing()
+        
+        // Cancel formatting job
+        formattingJob?.cancel()
+        formattingJob = null
     }
     
     private fun showProcessingSpinner() {
-        isProcessing = true
-        flogInfo(LogTopic.IMS_EVENTS) { "Processing spinner shown" }
+        // Processing state is now managed by the state machine
+        flogInfo(LogTopic.IMS_EVENTS) { "Processing spinner shown - state managed by state machine" }
     }
     
     private fun hideProcessingSpinner() {
-        isProcessing = false
-        flogInfo(LogTopic.IMS_EVENTS) { "Processing spinner hidden" }
+        // Processing state is now managed by the state machine
+        flogInfo(LogTopic.IMS_EVENTS) { "Processing spinner hidden - state managed by state machine" }
     }
     
     private fun cleanupRecognizer() {
@@ -96,7 +227,6 @@ class VoiceInputManager(
     
     private fun stopRecording() {
         flogInfo(LogTopic.IMS_EVENTS) { "VoiceInputManager.stopRecording() - stopping recording only" }
-        isRecording = false
         
         val voiceSource = loadVoiceSource(context)
         if (voiceSource == "chirp") {
@@ -112,6 +242,7 @@ class VoiceInputManager(
     }
     
     private fun stopChirpRecording() {
+        scope.launch {
         try {
             val audioFile = audioRecorder?.stopRecording()
             if (audioFile != null && audioFile.exists()) {
@@ -119,15 +250,42 @@ class VoiceInputManager(
                 handleChirpTranscription(audioFile)
             } else {
                 flogInfo(LogTopic.IMS_EVENTS) { "No audio file recorded" }
+                    withContext(Dispatchers.Main) {
                 Toast.makeText(context, "No audio recorded", Toast.LENGTH_SHORT).show()
+                    }
             }
         } catch (e: Exception) {
             flogInfo(LogTopic.IMS_EVENTS) { "Failed to stop Chirp recording: ${e.message}" }
+                withContext(Dispatchers.Main) {
             Toast.makeText(context, "Failed to stop recording", Toast.LENGTH_SHORT).show()
+                }
         } finally {
             audioRecorder?.cleanup()
             audioRecorder = null
             recordingFile = null
+            }
+        }
+    }
+
+    private fun stopChirpRecordingInline(requestId: String) {
+        scope.launch {
+        try {
+            val audioFile = audioRecorder?.stopRecording()
+            if (audioFile != null && audioFile.exists()) {
+                flogInfo(LogTopic.IMS_EVENTS) { "Chirp recording stopped inline, file: ${audioFile.name}" }
+                handleChirpTranscriptionInline(audioFile, requestId)
+            } else {
+                flogInfo(LogTopic.IMS_EVENTS) { "No audio file recorded inline" }
+                inlineRecorderController.cancelProcessing()
+            }
+        } catch (e: Exception) {
+            flogInfo(LogTopic.IMS_EVENTS) { "Failed to stop Chirp recording inline: ${e.message}" }
+            inlineRecorderController.cancelProcessing()
+        } finally {
+            audioRecorder?.cleanup()
+            audioRecorder = null
+            recordingFile = null
+            }
         }
     }
 
@@ -162,28 +320,50 @@ class VoiceInputManager(
         try {
             audioRecorder = AudioRecorder(context)
             recordingFile = audioRecorder?.startRecording()
-            isRecording = true
             flogInfo(LogTopic.IMS_EVENTS) { "Started Chirp audio recording" }
             context.showShortToastSync("Recording for Chirp…")
         } catch (e: Exception) {
             flogInfo(LogTopic.IMS_EVENTS) { "Failed to start Chirp recording: ${e.message}" }
-            isRecording = false
             Toast.makeText(context, "Failed to start recording", Toast.LENGTH_SHORT).show()
+            // Clean up on failure
+            audioRecorder?.cleanup()
+            audioRecorder = null
+            recordingFile = null
         }
     }
     
     private fun startDeviceRecording() {
+        flogInfo(LogTopic.IMS_EVENTS) { "startDeviceRecording() - checking recognition availability" }
+        
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             context.showShortToastSync("Speech recognition not available")
             return
         }
         
-        // Clean up previous recognizer instance without hiding overlay
+        flogInfo(LogTopic.IMS_EVENTS) { "startDeviceRecording() - recognition available, starting coroutine" }
+        
+        // Move SpeechRecognizer creation to a coroutine to avoid blocking
+        scope.launch(Dispatchers.Main) {
+            try {
+                flogInfo(LogTopic.IMS_EVENTS) { "startDeviceRecording() - inside coroutine, cleaning up previous recognizer" }
+                
+                // Check if we're still in recording state
+                if (!inlineRecorderController.isRecording.value) {
+                    flogInfo(LogTopic.IMS_EVENTS) { "Recording was cancelled, aborting SpeechRecognizer creation" }
+                    return@launch
+                }
+                
+                // Clean up previous recognizer instance
         speechRecognizer?.stopListening()
         speechRecognizer?.destroy()
         speechRecognizer = null
-        isRecording = true
+                
+                flogInfo(LogTopic.IMS_EVENTS) { "startDeviceRecording() - creating SpeechRecognizer" }
+                
+                // Create SpeechRecognizer on main thread (required by Android)
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).also { sr ->
+                    flogInfo(LogTopic.IMS_EVENTS) { "startDeviceRecording() - SpeechRecognizer created, setting up listener" }
+                    
             sr.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {}
                 override fun onBeginningOfSpeech() {}
@@ -197,16 +377,17 @@ class VoiceInputManager(
                         SpeechRecognizer.ERROR_CLIENT,
                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                             // Critical errors - stop recording
-                            isRecording = false
+                                    CoroutineScope(Dispatchers.Main).launch {
                             Toast.makeText(context, "Voice input error $error", Toast.LENGTH_SHORT).show()
+                                    }
                         }
                         SpeechRecognizer.ERROR_NO_MATCH,
                         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
                             // No speech detected - just restart listening
-                            if (isRecording) {
+                            if (inlineRecorderController.isRecording.value) {
                                 CoroutineScope(Dispatchers.Main).launch {
                                     kotlinx.coroutines.delay(100)
-                                    if (isRecording) {
+                                    if (inlineRecorderController.isRecording.value) {
                                         restartListening()
                                     }
                                 }
@@ -214,10 +395,10 @@ class VoiceInputManager(
                         }
                         else -> {
                             // Other errors - try to recreate the recognizer
-                            if (isRecording) {
+                            if (inlineRecorderController.isRecording.value) {
                                 CoroutineScope(Dispatchers.Main).launch {
                                     kotlinx.coroutines.delay(200)
-                                    if (isRecording) {
+                                    if (inlineRecorderController.isRecording.value) {
                                         recreateRecognizer()
                                     }
                                 }
@@ -235,10 +416,10 @@ class VoiceInputManager(
                     }
                     
                     // Automatically restart listening to keep recording continuous
-                    if (isRecording) {
+                    if (inlineRecorderController.isRecording.value) {
                         CoroutineScope(Dispatchers.Main).launch {
                             kotlinx.coroutines.delay(100)
-                            if (isRecording) {
+                            if (inlineRecorderController.isRecording.value) {
                                 restartListening()
                             }
                         }
@@ -247,6 +428,13 @@ class VoiceInputManager(
                 override fun onPartialResults(partialResults: Bundle) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
+                    
+                    flogInfo(LogTopic.IMS_EVENTS) { "startDeviceRecording() - listener set, starting background setup" }
+                    
+                    // Start listening on main thread (required by Android)
+                    try {
+                        flogInfo(LogTopic.IMS_EVENTS) { "startDeviceRecording() - creating intent" }
+                        
             val selectedLanguage = dev.patrickgold.florisboard.app.settings.formatting.loadLanguage(context)
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -256,18 +444,37 @@ class VoiceInputManager(
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, selectedLanguage)
                 } else {
                     // Don't set language to let Google auto-detect
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toString())
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, java.util.Locale.getDefault().toString())
                 }
             }
+                        
+                        flogInfo(LogTopic.IMS_EVENTS) { "startDeviceRecording() - starting listening" }
             sr.startListening(intent)
+                        
+                        flogInfo(LogTopic.IMS_EVENTS) { "startDeviceRecording() - listening started successfully" }
+                        context.showShortToastSync("Listening…")
+                        
+                    } catch (e: Exception) {
+                        flogInfo(LogTopic.IMS_EVENTS) { "Failed to start device recording: ${e.message}" }
+                        Toast.makeText(context, "Failed to start voice recognition", Toast.LENGTH_SHORT).show()
+                        inlineRecorderController.cancelRecording()
+                    }
+                }
+                
+            } catch (e: Exception) {
+                flogInfo(LogTopic.IMS_EVENTS) { "Failed to create SpeechRecognizer: ${e.message}" }
+                Toast.makeText(context, "Failed to start voice recognition", Toast.LENGTH_SHORT).show()
+                inlineRecorderController.cancelRecording()
+            }
         }
-        context.showShortToastSync("Listening…")
     }
 
     private fun restartListening() {
         flogInfo(LogTopic.IMS_EVENTS) { "VoiceInputManager.restartListening()" }
-        // Don't call stopListening() - just start listening again directly
-        // The recognizer will handle the transition automatically
+        
+        // Restart listening on main thread (required by Android)
+        scope.launch(Dispatchers.Main) {
+            try {
         val selectedLanguage = dev.patrickgold.florisboard.app.settings.formatting.loadLanguage(context)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -275,10 +482,9 @@ class VoiceInputManager(
             if (selectedLanguage != "auto") {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, selectedLanguage)
             } else {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toString())
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, java.util.Locale.getDefault().toString())
             }
         }
-        try {
             speechRecognizer?.startListening(intent)
         } catch (e: Exception) {
             flogInfo(LogTopic.IMS_EVENTS) { "Failed to restart listening: ${e.message}" }
@@ -288,6 +494,7 @@ class VoiceInputManager(
                     kotlinx.coroutines.delay(200)
                     if (isRecording) {
                         recreateRecognizer()
+                        }
                     }
                 }
             }
@@ -296,9 +503,14 @@ class VoiceInputManager(
 
     private fun recreateRecognizer() {
         flogInfo(LogTopic.IMS_EVENTS) { "VoiceInputManager.recreateRecognizer()" }
+        
+        // Move SpeechRecognizer recreation to a coroutine to avoid blocking
+        scope.launch(Dispatchers.Main) {
+            try {
         speechRecognizer?.destroy()
         speechRecognizer = null
         
+                // Create SpeechRecognizer on main thread (required by Android)
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).also { sr ->
             sr.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {}
@@ -311,25 +523,26 @@ class VoiceInputManager(
                     when (error) {
                         SpeechRecognizer.ERROR_CLIENT,
                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
-                            isRecording = false
+                                    CoroutineScope(Dispatchers.Main).launch {
                             Toast.makeText(context, "Voice input error $error", Toast.LENGTH_SHORT).show()
+                                    }
                         }
                         SpeechRecognizer.ERROR_NO_MATCH,
                         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
-                            if (isRecording) {
+                            if (inlineRecorderController.isRecording.value) {
                                 CoroutineScope(Dispatchers.Main).launch {
                                     kotlinx.coroutines.delay(100)
-                                    if (isRecording) {
+                                    if (inlineRecorderController.isRecording.value) {
                                         restartListening()
                                     }
                                 }
                             }
                         }
                         else -> {
-                            if (isRecording) {
+                            if (inlineRecorderController.isRecording.value) {
                                 CoroutineScope(Dispatchers.Main).launch {
                                     kotlinx.coroutines.delay(200)
-                                    if (isRecording) {
+                                    if (inlineRecorderController.isRecording.value) {
                                         recreateRecognizer()
                                     }
                                 }
@@ -346,10 +559,10 @@ class VoiceInputManager(
                         handleTranscript(transcript)
                     }
                     
-                    if (isRecording) {
+                    if (inlineRecorderController.isRecording.value) {
                         CoroutineScope(Dispatchers.Main).launch {
                             kotlinx.coroutines.delay(100)
-                            if (isRecording) {
+                            if (inlineRecorderController.isRecording.value) {
                                 restartListening()
                             }
                         }
@@ -358,7 +571,11 @@ class VoiceInputManager(
                 override fun onPartialResults(partialResults: Bundle) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
-        }
+                    
+                    // Start listening with a small delay
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            delay(100)
         
         val selectedLanguage = dev.patrickgold.florisboard.app.settings.formatting.loadLanguage(context)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -367,15 +584,31 @@ class VoiceInputManager(
             if (selectedLanguage != "auto") {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, selectedLanguage)
             } else {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toString())
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, java.util.Locale.getDefault().toString())
             }
         }
-        speechRecognizer?.startListening(intent)
+                            sr.startListening(intent)
+                            
+                        } catch (e: Exception) {
+                            flogInfo(LogTopic.IMS_EVENTS) { "Failed to recreate recognizer: ${e.message}" }
+                            CoroutineScope(Dispatchers.Main).launch {
+                                Toast.makeText(context, "Voice recognition failed", Toast.LENGTH_SHORT).show()
+                                inlineRecorderController.cancelRecording()
+                            }
+                        }
+                    }
+                }
+                
+            } catch (e: Exception) {
+                flogInfo(LogTopic.IMS_EVENTS) { "Failed to create SpeechRecognizer: ${e.message}" }
+                Toast.makeText(context, "Voice recognition failed", Toast.LENGTH_SHORT).show()
+                inlineRecorderController.cancelRecording()
+            }
+        }
     }
 
     fun stopVoiceInput() {
         flogInfo(LogTopic.IMS_EVENTS) { "VoiceInputManager.stopVoiceInput()" }
-        isRecording = false
         cleanupRecognizer()
         formattingJob?.cancel()
         formattingJob = null
@@ -456,15 +689,89 @@ class VoiceInputManager(
                     flogInfo(LogTopic.IMS_EVENTS) { "Failed to delete audio file: ${e.message}" }
                 }
                 
-                // Hide spinner
+                // Complete processing - state machine will handle UI updates
                 withContext(Dispatchers.Main) {
-                    hideProcessingSpinner()
+                    inlineRecorderController.completeProcessing()
                 }
             }
         }
         
         // Store the job so it can be cancelled when the user explicitly stops voice input
         formattingJob = chirpJob
+    }
+
+    private fun handleChirpTranscriptionInline(audioFile: File, requestId: String) {
+        flogInfo(LogTopic.IMS_EVENTS) { "handleChirpTranscriptionInline() - Starting inline transcription for file: ${audioFile.name}, requestId: $requestId" }
+        val editorInstance by context.editorInstance()
+        
+        // Start inline processing
+        inlineRecorderController.startProcessing(requestId)
+        
+        val baseUrl = loadBaseUrl(context)
+        val apiKey = loadApiKey(context)
+        flogInfo(LogTopic.IMS_EVENTS) { "handleChirpTranscriptionInline() - Base URL: $baseUrl, API Key: ${apiKey?.take(8)}..." }
+        
+        val client = FormatServiceClient(
+            baseUrlProvider = { loadBaseUrl(context) },
+            apiKeyProvider = { loadApiKey(context) },
+        )
+        
+        // Create inline formatting job
+        val inlineJob = scope.launch(Dispatchers.IO) {
+            try {
+                val enableFormatting = loadEnabled(context)
+                val selectedLanguage = loadLanguage(context)
+                flogInfo(LogTopic.IMS_EVENTS) { "handleChirpTranscriptionInline() - Calling transcribeWithChirp with enableFormatting: $enableFormatting, language: $selectedLanguage" }
+                
+                val response = withTimeoutOrNull(NETWORK_TIMEOUT_MS) {
+                    client.transcribeWithChirp(audioFile, requestId, enableFormatting, selectedLanguage)
+                }
+                
+                if (response != null) {
+                    flogInfo(LogTopic.IMS_EVENTS) { "handleChirpTranscriptionInline() - Received response from transcribeWithChirp" }
+                    withContext(Dispatchers.Main) {
+                        editorInstance.commitText(response.formattedText)
+                        flogInfo(LogTopic.IMS_EVENTS) { "Inline Chirp transcription completed: ${response.formattedText.take(50)}..." }
+                        inlineRecorderController.completeProcessing()
+                    }
+                } else {
+                    flogInfo(LogTopic.IMS_EVENTS) { "Inline Chirp transcription timeout" }
+                    withContext(Dispatchers.Main) { 
+                        Toast.makeText(context, "Transcription timeout — please try again", Toast.LENGTH_SHORT).show()
+                        inlineRecorderController.cancelProcessing()
+                    }
+                }
+            } catch (auth: FormatServiceClient.AuthException) {
+                withContext(Dispatchers.Main) { 
+                    Toast.makeText(context, "Chirp auth failed", Toast.LENGTH_SHORT).show()
+                    inlineRecorderController.cancelProcessing()
+                }
+                flogInfo(LogTopic.IMS_EVENTS) { "Inline Chirp auth failed" }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) {
+                    flogInfo(LogTopic.IMS_EVENTS) { "Inline Chirp transcription cancelled" }
+                    // Don't call cancelProcessing on cancellation - it's already handled
+                } else {
+                    flogInfo(LogTopic.IMS_EVENTS) { "Inline Chirp transcription failed: ${e.message}" }
+                    withContext(Dispatchers.Main) { 
+                        Toast.makeText(context, "Chirp transcription failed", Toast.LENGTH_SHORT).show()
+                        inlineRecorderController.cancelProcessing()
+                    }
+                }
+            } finally {
+                // Clean up audio file
+                try {
+                    if (audioFile.exists()) {
+                        audioFile.delete()
+                    }
+                } catch (e: Exception) {
+                    flogInfo(LogTopic.IMS_EVENTS) { "Failed to delete audio file: ${e.message}" }
+                }
+            }
+        }
+        
+        // Store the job for potential cancellation
+        formattingJob = inlineJob
     }
 
     private fun handleTranscript(raw: String) {
@@ -516,6 +823,7 @@ class VoiceInputManager(
             }
         }
     }
+
 }
 
 

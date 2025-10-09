@@ -63,6 +63,8 @@ import dev.patrickgold.florisboard.ime.smartbar.quickaction.ToggleOverflowPanelA
 import dev.patrickgold.florisboard.ime.theme.FlorisImeUi
 import dev.patrickgold.florisboard.keyboardManager
 import dev.patrickgold.florisboard.nlpManager
+import dev.patrickgold.florisboard.lib.devtools.LogTopic
+import dev.patrickgold.florisboard.lib.devtools.flogInfo
 import dev.patrickgold.jetpref.datastore.model.observeAsState
 import kotlinx.coroutines.launch
 import org.florisboard.lib.android.AndroidVersion
@@ -94,6 +96,38 @@ fun Smartbar() {
     val prefs by FlorisPreferenceStore
     val smartbarEnabled by prefs.smartbar.enabled.observeAsState()
     val extendedActionsPlacement by prefs.smartbar.extendedActionsPlacement.observeAsState()
+    
+    val context = LocalContext.current
+    val keyboardManager by context.keyboardManager()
+    val isInlineRecordingActive by keyboardManager.voiceInputManager.inlineRecorderController.isInlineRecordingActive.collectAsState()
+    val keepToolbarVisible by keyboardManager.voiceInputManager.inlineRecorderController.keepToolbarVisible.collectAsState()
+    val isRecording by keyboardManager.voiceInputManager.inlineRecorderController.isRecording.collectAsState()
+    val isProcessing by keyboardManager.voiceInputManager.inlineRecorderController.isProcessing.collectAsState()
+
+    // Show inline voice toolbar when recording is active or when we should keep it visible
+    if (isInlineRecordingActive || keepToolbarVisible) {
+        dev.patrickgold.florisboard.ime.voice.InlineVoiceToolbar(
+            isRecording = isRecording,
+            isProcessing = isProcessing,
+            onBackClick = {
+                // Cancel recording/processing and clear keep toolbar visible flag
+                keyboardManager.voiceInputManager.cancelInlineRecording()
+                keyboardManager.voiceInputManager.inlineRecorderController.clearKeepToolbarVisible()
+            },
+            onRecorderClick = {
+                // Use toggle function to handle state transitions properly
+                keyboardManager.voiceInputManager.toggleVoiceInput()
+            },
+            onCancelClick = {
+                keyboardManager.voiceInputManager.cancelInlineProcessing()
+            },
+            onLanguageUpdate = { languageCode ->
+                // Language update callback - could be used for additional handling if needed
+                flogInfo(LogTopic.IMS_EVENTS) { "Smartbar: Language updated to: $languageCode" }
+            },
+        )
+        return
+    }
 
     AnimatedVisibility(
         visible = smartbarEnabled,

@@ -31,6 +31,7 @@ androidx-test-espresso = "3.6.1"
 androidx-test-uiautomator = "2.3.0"
 junit-jupiter-params = "5.13.3"
 kotlinx-kover = "0.9.1"
+constraintlayout = "2.2.1"
 
 
 
@@ -80,6 +81,7 @@ androidx-test-espresso-core = { module = "androidx.test.espresso:espresso-core",
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "androidx-test-uiautomator" }
 junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter-params" }
 kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 
 
 
