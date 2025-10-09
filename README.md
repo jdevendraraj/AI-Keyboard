@@ -74,10 +74,59 @@ Beginning with v0.7 FlorisBoard will enter the public beta on Google Play.
 - Advanced theming support and customization
 - Integrated extension support (still evolving)
 - Emoji keyboard / history / suggestions
+- **Custom Prompt Modes**: Create and manage custom text formatting templates for voice input
 
 > [!IMPORTANT]
 > Word suggestions/spell checking are not included in the current releases
 > and are a major goal for the v0.6 milestone.
+
+## Custom Prompt Modes
+
+The AI Keyboard app now supports custom prompt modes, allowing users to create and manage their own text formatting templates.
+
+### Features
+- **Custom Templates**: Create custom prompt templates for text formatting
+- **Built-in Modes**: Three pre-configured modes (Default, Casual Summary, Technical Notes)
+- **Template Preview**: Preview how templates will look with sample text
+- **Secure Storage**: All modes stored locally with AES256_GCM encryption
+- **Privacy Focused**: Templates are sent with requests but never stored on the server
+
+### How It Works
+1. **Client-Side Storage**: Custom modes are stored locally on the device using EncryptedSharedPreferences
+2. **Request Integration**: Selected mode's template is sent with each transcription request
+3. **Server Processing**: Backend processes custom prompts but doesn't persist them
+4. **Backward Compatibility**: Existing functionality unchanged for users who don't use custom modes
+
+### Security & Privacy
+- **Local Storage Only**: Custom prompts are never stored on the server
+- **Encrypted Storage**: All mode data encrypted with AES256_GCM
+- **LLM Forwarding**: Custom prompts are forwarded to the configured LLM provider
+- **No Persistence**: Server logs only truncated previews (200 chars) + hash for debugging
+
+### Usage
+1. Navigate to Settings → Formatting Backend → Prompt Modes
+2. Create a new mode or select from built-in options
+3. Customize the prompt template (use `{{transcript}}` placeholder)
+4. Select the mode for use with voice input
+5. Templates are automatically applied to all transcriptions
+
+### Template Examples
+```
+# Casual Summary
+Summarize the following in a casual, friendly tone:
+
+{{transcript}}
+
+# Technical Notes  
+Format the following as technical notes with clear structure:
+
+{{transcript}}
+
+# Translation
+Translate the following to Spanish:
+
+{{transcript}}
+```
 
 Feature roadmap: See [ROADMAP.md](ROADMAP.md)
 

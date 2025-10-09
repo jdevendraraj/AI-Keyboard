@@ -25,19 +25,21 @@ import java.util.concurrent.TimeUnit
 data class FormatResponse(
     @SerialName("formattedText") val formattedText: String,
     @SerialName("requestId") val requestId: String? = null,
+    @SerialName("modeTitle") val modeTitle: String? = null,
 )
 
 @Serializable
 data class ChirpTranscribeResponse(
     @SerialName("formattedText") val formattedText: String,
     @SerialName("requestId") val requestId: String? = null,
+    @SerialName("modeTitle") val modeTitle: String? = null,
     @SerialName("rawTranscription") val rawTranscription: String? = null,
     @SerialName("usage") val usage: Map<String, Int>? = null,
 )
 
 interface IFormatServiceClient {
-    suspend fun formatTranscript(transcript: String, requestId: String?): FormatResponse
-    suspend fun transcribeWithChirp(audioFile: File, requestId: String, enableFormatting: Boolean = true, language: String = "auto"): ChirpTranscribeResponse
+    suspend fun formatTranscript(transcript: String, requestId: String?, promptTemplate: String? = null, modeTitle: String? = null): FormatResponse
+    suspend fun transcribeWithChirp(audioFile: File, requestId: String, enableFormatting: Boolean = true, language: String = "auto", promptTemplate: String? = null, modeTitle: String? = null): ChirpTranscribeResponse
     suspend fun healthCheck(): Boolean
 }
 
@@ -53,6 +55,8 @@ class FormatServiceClient(
     private data class FormatRequest(
         val transcript: String,
         val requestId: String? = null,
+        val promptTemplate: String? = null,
+        val modeTitle: String? = null,
     )
 
     // Response defined top-level
@@ -82,7 +86,7 @@ class FormatServiceClient(
 
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
-    override suspend fun formatTranscript(transcript: String, requestId: String?): FormatResponse =
+    override suspend fun formatTranscript(transcript: String, requestId: String?, promptTemplate: String?, modeTitle: String?): FormatResponse =
         withContext(Dispatchers.IO) {
             val baseUrl = baseUrlProvider()?.trimEnd('/') ?: throw IllegalStateException("No base URL configured")
             val apiKey = apiKeyProvider() ?: throw IllegalStateException("No API key configured")
@@ -92,8 +96,30 @@ class FormatServiceClient(
             Log.d("FormatServiceClient", "API Key: ${apiKey.take(8)}...")
             Log.d("FormatServiceClient", "Transcript length: ${transcript.length}")
             Log.d("FormatServiceClient", "Request ID: $requestId")
+            Log.d("FormatServiceClient", "Mode Title: $modeTitle")
+            Log.d("FormatServiceClient", "Has Custom Prompt: ${promptTemplate != null}")
 
-            val bodyObj = FormatRequest(transcript = transcript, requestId = requestId)
+            // Process prompt template (client-side validation and auto-append)
+            var processedPromptTemplate = promptTemplate
+            if (processedPromptTemplate != null) {
+                // Check length
+                if (processedPromptTemplate.length > 4000) {
+                    throw IllegalArgumentException("Prompt template exceeds 4000 character limit")
+                }
+                
+                // Auto-append transcript placeholder if missing
+                if (!processedPromptTemplate.contains("{{transcript}}")) {
+                    processedPromptTemplate = "$processedPromptTemplate\n\nTranscript: {{transcript}}"
+                    Log.d("FormatServiceClient", "Auto-appended transcript placeholder to custom prompt")
+                }
+            }
+
+            val bodyObj = FormatRequest(
+                transcript = transcript, 
+                requestId = requestId,
+                promptTemplate = processedPromptTemplate,
+                modeTitle = modeTitle
+            )
             val body = json.encodeToString(bodyObj).toRequestBody(jsonMedia)
 
             val url = "$baseUrl/api/format"
@@ -119,18 +145,37 @@ class FormatServiceClient(
             }
         }
 
-    override suspend fun transcribeWithChirp(audioFile: File, requestId: String, enableFormatting: Boolean, language: String): ChirpTranscribeResponse =
+    override suspend fun transcribeWithChirp(audioFile: File, requestId: String, enableFormatting: Boolean, language: String, promptTemplate: String?, modeTitle: String?): ChirpTranscribeResponse =
         withContext(Dispatchers.IO) {
             val baseUrl = baseUrlProvider()?.trimEnd('/') ?: throw IllegalStateException("No base URL configured")
             val apiKey = apiKeyProvider() ?: throw IllegalStateException("No API key configured")
 
-            Log.d("FormatServiceClient", "transcribeWithChirp - baseUrl: $baseUrl, apiKey: ${apiKey.take(8)}..., file: ${audioFile.name}, requestId: $requestId, enableFormatting: $enableFormatting, language: $language")
+            Log.d("FormatServiceClient", "transcribeWithChirp - baseUrl: $baseUrl, apiKey: ${apiKey.take(8)}..., file: ${audioFile.name}, requestId: $requestId, enableFormatting: $enableFormatting, language: $language, modeTitle: $modeTitle, hasCustomPrompt: ${promptTemplate != null}")
+
+            // Process prompt template (client-side validation and auto-append)
+            var processedPromptTemplate = promptTemplate
+            if (processedPromptTemplate != null) {
+                // Check length
+                if (processedPromptTemplate.length > 4000) {
+                    throw IllegalArgumentException("Prompt template exceeds 4000 character limit")
+                }
+                
+                // Auto-append transcript placeholder if missing
+                if (!processedPromptTemplate.contains("{{transcript}}")) {
+                    processedPromptTemplate = "$processedPromptTemplate\n\nTranscript: {{transcript}}"
+                    Log.d("FormatServiceClient", "Auto-appended transcript placeholder to custom prompt for Chirp")
+                }
+            }
 
             val requestBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("file", audioFile.name, audioFile.asRequestBody("audio/wav".toMediaType()))
                 .addFormDataPart("requestId", requestId)
                 .addFormDataPart("enableFormatting", enableFormatting.toString())
+                .apply {
+                    processedPromptTemplate?.let { addFormDataPart("promptTemplate", it) }
+                    modeTitle?.let { addFormDataPart("modeTitle", it) }
+                }
                 .build()
 
             val url = "$baseUrl/api/transcribe-chirp?language=$language"

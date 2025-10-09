@@ -78,6 +78,7 @@ The server will start on `http://localhost:3000`
 | `LLM_MODEL` | `gpt-3.5-turbo` | OpenAI model to use |
 | `LLM_TEMPERATURE` | `0.1` | LLM temperature (0-1) |
 | `LLM_MAX_TOKENS` | `2000` | Maximum tokens for LLM response |
+| `MAX_PROMPT_TEMPLATE_CHARS` | `4000` | Maximum characters for custom prompt templates |
 | `CORS_ALLOWED_ORIGINS` | `*` | Comma-separated list of allowed CORS origins |
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window in milliseconds |
 | `RATE_LIMIT_MAX` | `60` | Maximum requests per window |
@@ -97,7 +98,9 @@ Format transcribed text using GPT.
 ```json
 {
   "transcript": "hello world this is a test",
-  "requestId": "optional-unique-id"
+  "requestId": "optional-unique-id",
+  "promptTemplate": "optional-custom-prompt-template",
+  "modeTitle": "optional-mode-title"
 }
 ```
 
@@ -106,6 +109,7 @@ Format transcribed text using GPT.
 {
   "formattedText": "Hello world, this is a test.",
   "requestId": "optional-unique-id",
+  "modeTitle": "optional-mode-title",
   "usage": {
     "promptTokens": 25,
     "completionTokens": 8,
@@ -117,6 +121,14 @@ Format transcribed text using GPT.
 **Validation:**
 - `transcript`: Required string, max 8000 characters
 - `requestId`: Optional string for idempotency
+- `promptTemplate`: Optional string, max 4000 characters (configurable via `MAX_PROMPT_TEMPLATE_CHARS`)
+- `modeTitle`: Optional string for identifying the prompt mode
+
+**Custom Prompt Templates:**
+- If `promptTemplate` is provided, it will be used instead of the default formatting prompt
+- The template should contain `{{transcript}}` where the transcribed text should be inserted
+- If `{{transcript}}` is missing, it will be auto-appended as `\n\nTranscript: {{transcript}}`
+- Custom prompts are forwarded to the LLM provider and not stored by the server
 
 ### POST /api/transcribe-chirp
 
@@ -129,6 +141,9 @@ Transcribe audio using Google Chirp and format the result.
 **Request Body (multipart/form-data):**
 - `file`: Audio file (WAV, OGG, M4A, etc.)
 - `requestId`: Optional unique identifier
+- `promptTemplate`: Optional custom prompt template (max 4000 chars)
+- `modeTitle`: Optional mode title for identification
+- `enableFormatting`: Optional boolean (default: true)
 
 **Query Parameters:**
 - `language`: Optional language code (e.g., `en-US`, `es-ES`, `auto`)
@@ -138,6 +153,7 @@ Transcribe audio using Google Chirp and format the result.
 {
   "formattedText": "Hello world, this is a test.",
   "requestId": "optional-unique-id",
+  "modeTitle": "optional-mode-title",
   "rawTranscription": "hello world this is a test",
   "usage": {
     "promptTokens": 25,
@@ -152,6 +168,8 @@ Transcribe audio using Google Chirp and format the result.
 - `file`: Required audio file, max 10MB
 - `requestId`: Optional string for idempotency
 - `language`: Optional language code for transcription
+- `promptTemplate`: Optional string, max 4000 characters
+- `modeTitle`: Optional string for identifying the prompt mode
 
 ### GET /health
 
@@ -179,12 +197,36 @@ curl -X POST http://localhost:3000/api/format \
   }'
 ```
 
+**Format text with custom prompt:**
+```bash
+curl -X POST http://localhost:3000/api/format \
+  -H "Content-Type: application/json" \
+  -H "x-client-key: your-api-key" \
+  -d '{
+    "transcript": "hello world this is a test",
+    "requestId": "unique-request-id",
+    "modeTitle": "Casual Summary",
+    "promptTemplate": "Summarize the following in a casual tone:\n\n{{transcript}}"
+  }'
+```
+
 **Transcribe and format audio:**
 ```bash
 curl -X POST http://localhost:3000/api/transcribe-chirp \
   -H "x-client-key: your-api-key" \
   -F "file=@/path/to/recorded.wav" \
   -F "requestId=req-123" \
+  -G -d "language=en-US"
+```
+
+**Transcribe and format audio with custom prompt:**
+```bash
+curl -X POST http://localhost:3000/api/transcribe-chirp \
+  -H "x-client-key: your-api-key" \
+  -F "file=@/path/to/recorded.wav" \
+  -F "requestId=req-123" \
+  -F "modeTitle=Technical Notes" \
+  -F "promptTemplate=Format the following as technical notes with clear structure:\n\n{{transcript}}" \
   -G -d "language=en-US"
 ```
 
@@ -314,6 +356,21 @@ The tests include:
 - Idempotency
 - Error handling
 - LLM adapter functionality
+
+## Security & Privacy
+
+### Custom Prompt Templates
+- **Client-side storage**: Custom prompt templates are stored only on the client device
+- **No server persistence**: The server does not store or persist custom prompt templates
+- **LLM forwarding**: Custom prompts are forwarded to the configured LLM provider (OpenAI, etc.)
+- **Third-party processing**: Custom prompts are subject to the LLM provider's data processing policies
+- **Logging**: Only truncated previews (first 200 chars) and hashes of prompts are logged for debugging
+- **Recommendation**: Do not include secrets, personal information, or sensitive data in custom prompts
+
+### Environment Variables
+- Set `MAX_PROMPT_TEMPLATE_CHARS` to limit prompt template length (default: 4000)
+- Configure `CLIENT_API_KEYS` with strong, unique keys for each client
+- Use HTTPS in production to encrypt all communications
 
 ## Production Considerations
 

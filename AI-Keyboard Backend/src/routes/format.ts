@@ -7,17 +7,21 @@ import { createLLMAdapter, withRetry } from '../lib/llmAdapter';
 import { idempotencyCache } from '../lib/idempotency';
 import { logger } from '../lib/logger';
 import { AuthenticatedRequest } from '../lib/auth';
+import crypto from 'crypto';
 
 const router = Router();
 
 interface FormatRequest {
   transcript: string;
   requestId?: string;
+  promptTemplate?: string;
+  modeTitle?: string;
 }
 
 interface FormatResponse {
   formattedText: string;
   requestId?: string;
+  modeTitle?: string;
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -49,6 +53,18 @@ function validateFormatRequest(body: any): { isValid: boolean; error?: string } 
     return { isValid: false, error: 'requestId must be a string if provided' };
   }
 
+  if (body.promptTemplate && typeof body.promptTemplate !== 'string') {
+    return { isValid: false, error: 'promptTemplate must be a string if provided' };
+  }
+
+  if (body.promptTemplate && body.promptTemplate.length > parseInt(process.env.MAX_PROMPT_TEMPLATE_CHARS || '4000')) {
+    return { isValid: false, error: `promptTemplate cannot exceed ${process.env.MAX_PROMPT_TEMPLATE_CHARS || '4000'} characters` };
+  }
+
+  if (body.modeTitle && typeof body.modeTitle !== 'string') {
+    return { isValid: false, error: 'modeTitle must be a string if provided' };
+  }
+
   return { isValid: true };
 }
 
@@ -74,10 +90,23 @@ router.post('/format', async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    const { transcript } = req.body as FormatRequest;
+    const { transcript, promptTemplate, modeTitle } = req.body as FormatRequest;
 
     // Log transcript preview (safely)
     logger.logTranscriptPreview(transcript, requestId);
+
+    // Log custom prompt info (safely)
+    if (promptTemplate) {
+      const promptPreview = promptTemplate.substring(0, 200);
+      const promptHash = crypto.createHash('sha256').update(promptTemplate).digest('hex').substring(0, 8);
+      logger.info('Custom prompt template provided', {
+        requestId,
+        modeTitle,
+        promptPreview,
+        promptHash,
+        promptLength: promptTemplate.length
+      });
+    }
 
     // Check idempotency cache
     if (requestId) {
@@ -87,7 +116,8 @@ router.post('/format', async (req: AuthenticatedRequest, res: Response) => {
         logger.info('Format request completed (cached)', {
           requestId,
           duration,
-          transcriptLength: transcript.length
+          transcriptLength: transcript.length,
+          modeTitle
         });
         return res.json(cachedResponse);
       }
@@ -97,11 +127,30 @@ router.post('/format', async (req: AuthenticatedRequest, res: Response) => {
     const llmAdapter = createLLMAdapter();
 
     // Format text with retry logic
-    const llmResponse = await withRetry(() => llmAdapter.formatText(transcript));
+    let llmResponse;
+    if (promptTemplate) {
+      // Process custom prompt template
+      let processedTemplate = promptTemplate;
+      
+      // Auto-append transcript placeholder if missing
+      if (!processedTemplate.includes('{{transcript}}')) {
+        processedTemplate = `${processedTemplate}\n\nTranscript: {{transcript}}`;
+        logger.info('Auto-appended transcript placeholder to custom prompt', {
+          requestId,
+          modeTitle
+        });
+      }
+      
+      llmResponse = await withRetry(() => llmAdapter.formatTextWithCustomPrompt(transcript, processedTemplate));
+    } else {
+      // Use default formatting
+      llmResponse = await withRetry(() => llmAdapter.formatText(transcript));
+    }
 
     const response: FormatResponse = {
       formattedText: llmResponse.text,
       requestId,
+      modeTitle,
       usage: llmResponse.usage
     };
 
@@ -116,6 +165,7 @@ router.post('/format', async (req: AuthenticatedRequest, res: Response) => {
       duration,
       transcriptLength: transcript.length,
       formattedLength: llmResponse.text.length,
+      modeTitle,
       usage: llmResponse.usage
     });
 

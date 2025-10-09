@@ -181,6 +181,14 @@ object Routes {
         object Formatting
 
         @Serializable
+        @Deeplink("settings/formatting/modes")
+        object PromptModes
+
+        @Serializable
+        @Deeplink("settings/formatting/mode-editor")
+        data class ModeEditor(val id: String? = null)
+
+        @Serializable
         @Deeplink("settings/other/physical-keyboard")
         object PhysicalKeyboard
 
@@ -320,6 +328,11 @@ object Routes {
 
             composableWithDeepLink(Settings.Other::class) { OtherScreen() }
             composableWithDeepLink(Settings.Formatting::class) { dev.patrickgold.florisboard.app.settings.formatting.FormattingBackendScreen() }
+            composableWithDeepLink(Settings.PromptModes::class) { dev.patrickgold.florisboard.app.settings.formatting.ModesScreen() }
+            composableWithDeepLink(Settings.ModeEditor::class) { navBackStack ->
+                val payload = navBackStack.toRoute<Settings.ModeEditor>()
+                dev.patrickgold.florisboard.app.settings.formatting.ModeEditorScreen(payload.id)
+            }
             composableWithDeepLink(Settings.PhysicalKeyboard::class) { PhysicalKeyboardScreen() }
             composableWithDeepLink(Settings.Backup::class) { BackupScreen() }
             composableWithDeepLink(Settings.Restore::class) { RestoreScreen() }

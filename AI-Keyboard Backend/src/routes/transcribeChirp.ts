@@ -3,6 +3,7 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs/promises';
+import crypto from 'crypto';
 import { chirpAdapter } from '../lib/chirpAdapter';
 import { createLLMAdapter } from '../lib/llmAdapter';
 import { logger } from '../lib/logger';
@@ -46,10 +47,25 @@ export const transcribeChirpHandler = async (req: Request, res: Response) => {
   // Convert string to boolean since multer sends form data as strings
   const enableFormatting = req.body.enableFormatting !== 'false';
   
+  // Get custom prompt template and mode title from form data
+  const promptTemplate = req.body.promptTemplate;
+  const modeTitle = req.body.modeTitle;
+  
+  // Validate prompt template if provided
+  if (promptTemplate && promptTemplate.length > parseInt(process.env.MAX_PROMPT_TEMPLATE_CHARS || '4000')) {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: `promptTemplate cannot exceed ${process.env.MAX_PROMPT_TEMPLATE_CHARS || '4000'} characters`,
+      requestId
+    });
+  }
+  
   logger.info('Chirp transcription request received', {
     requestId,
     enableFormatting,
-    rawEnableFormatting: req.body.enableFormatting
+    rawEnableFormatting: req.body.enableFormatting,
+    hasCustomPrompt: !!promptTemplate,
+    modeTitle
   });
   
   try {
@@ -107,11 +123,42 @@ export const transcribeChirpHandler = async (req: Request, res: Response) => {
     let usage: any = undefined;
 
     if (enableFormatting) {
-      // Format the transcript using existing LLM adapter
+      // Format the transcript using LLM adapter
       const llmAdapter = createLLMAdapter();
-      const formattingResult = await llmAdapter.formatText(transcriptionResult.transcript);
-      formattedText = formattingResult.text;
-      usage = formattingResult.usage;
+      
+      if (promptTemplate) {
+        // Log custom prompt info (safely)
+        const promptPreview = promptTemplate.substring(0, 200);
+        const promptHash = crypto.createHash('sha256').update(promptTemplate).digest('hex').substring(0, 8);
+        logger.info('Custom prompt template provided for Chirp transcription', {
+          requestId,
+          modeTitle,
+          promptPreview,
+          promptHash,
+          promptLength: promptTemplate.length
+        });
+        
+        // Process custom prompt template
+        let processedTemplate = promptTemplate;
+        
+        // Auto-append transcript placeholder if missing
+        if (!processedTemplate.includes('{{transcript}}')) {
+          processedTemplate = `${processedTemplate}\n\nTranscript: {{transcript}}`;
+          logger.info('Auto-appended transcript placeholder to custom prompt for Chirp', {
+            requestId,
+            modeTitle
+          });
+        }
+        
+        const formattingResult = await llmAdapter.formatTextWithCustomPrompt(transcriptionResult.transcript, processedTemplate);
+        formattedText = formattingResult.text;
+        usage = formattingResult.usage;
+      } else {
+        // Use default formatting
+        const formattingResult = await llmAdapter.formatText(transcriptionResult.transcript);
+        formattedText = formattingResult.text;
+        usage = formattingResult.usage;
+      }
     } else {
       // Use raw transcription without formatting
       formattedText = transcriptionResult.transcript;
@@ -120,6 +167,7 @@ export const transcribeChirpHandler = async (req: Request, res: Response) => {
     const response = {
       formattedText,
       requestId,
+      modeTitle,
       rawTranscription: transcriptionResult.transcript,
       usage,
       processingTime: Date.now() - startTime
@@ -129,7 +177,8 @@ export const transcribeChirpHandler = async (req: Request, res: Response) => {
       requestId,
       totalProcessingTime: response.processingTime,
       formattedTextLength: response.formattedText.length,
-      formattingApplied: enableFormatting
+      formattingApplied: enableFormatting,
+      modeTitle
     });
 
     return res.json(response);

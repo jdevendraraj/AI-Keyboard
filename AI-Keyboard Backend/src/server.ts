@@ -16,6 +16,11 @@ import { transcribeChirpHandler, upload } from './routes/transcribeChirp';
 // Load environment variables
 dotenv.config();
 
+// Log security warning about custom prompts
+logger.warn('Custom prompts are forwarded to LLM provider and not stored by this server', {
+  warning: 'Custom prompt templates sent by clients are forwarded to the configured LLM API and subject to third-party processing. Do not include secrets in prompts.'
+});
+
 export function createServer(): express.Application {
   const app = express();
 

@@ -19,6 +19,7 @@ import dev.patrickgold.florisboard.app.settings.formatting.loadApiKey
 import dev.patrickgold.florisboard.app.settings.formatting.loadBaseUrl
 import dev.patrickgold.florisboard.app.settings.formatting.loadLanguage
 import dev.patrickgold.florisboard.app.settings.formatting.loadVoiceSource
+import dev.patrickgold.florisboard.app.settings.formatting.getSelectedMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -105,6 +106,13 @@ class VoiceInputManager(
         val voiceSource = loadVoiceSource(context)
         flogInfo(LogTopic.IMS_EVENTS) { "Voice source: $voiceSource" }
         
+        // Ensure legacy voice overlay is not visible when using inline recording
+        val keyboardManager by context.keyboardManager()
+        CoroutineScope(Dispatchers.Main).launch {
+            keyboardManager.activeState.batchEdit { it.isVoiceOverlayVisible = false }
+            flogInfo(LogTopic.IMS_EVENTS) { "Cleared legacy voice overlay visibility for inline recording" }
+        }
+        
         // Language label will be updated automatically by InlineVoiceToolbar
         
         // Delay heavy operations to let UI update first
@@ -176,6 +184,13 @@ class VoiceInputManager(
         // Cancel any pending formatting job
         formattingJob?.cancel()
         formattingJob = null
+        
+        // Ensure legacy voice overlay is not visible
+        val keyboardManager by context.keyboardManager()
+        CoroutineScope(Dispatchers.Main).launch {
+            keyboardManager.activeState.batchEdit { it.isVoiceOverlayVisible = false }
+            flogInfo(LogTopic.IMS_EVENTS) { "Cleared legacy voice overlay visibility on cancel" }
+        }
     }
 
     /**
@@ -647,10 +662,14 @@ class VoiceInputManager(
             try {
                 val enableFormatting = loadEnabled(context)
                 val selectedLanguage = loadLanguage(context)
-                flogInfo(LogTopic.IMS_EVENTS) { "handleChirpTranscription() - Inside coroutine, about to call transcribeWithChirp with enableFormatting: $enableFormatting, language: $selectedLanguage" }
+                val selectedMode = getSelectedMode(context)
+                val promptTemplate = if (selectedMode?.isDefaultMode() == false) selectedMode.template else null
+                val modeTitle = selectedMode?.title
+                
+                flogInfo(LogTopic.IMS_EVENTS) { "handleChirpTranscription() - Inside coroutine, about to call transcribeWithChirp with enableFormatting: $enableFormatting, language: $selectedLanguage, modeTitle: $modeTitle, hasCustomPrompt: ${promptTemplate != null}" }
                 
                 val response = withTimeoutOrNull(NETWORK_TIMEOUT_MS) {
-                    client.transcribeWithChirp(audioFile, requestId, enableFormatting, selectedLanguage)
+                    client.transcribeWithChirp(audioFile, requestId, enableFormatting, selectedLanguage, promptTemplate, modeTitle)
                 }
                 
                 if (response != null) {
@@ -721,10 +740,14 @@ class VoiceInputManager(
             try {
                 val enableFormatting = loadEnabled(context)
                 val selectedLanguage = loadLanguage(context)
-                flogInfo(LogTopic.IMS_EVENTS) { "handleChirpTranscriptionInline() - Calling transcribeWithChirp with enableFormatting: $enableFormatting, language: $selectedLanguage" }
+                val selectedMode = getSelectedMode(context)
+                val promptTemplate = if (selectedMode?.isDefaultMode() == false) selectedMode.template else null
+                val modeTitle = selectedMode?.title
+                
+                flogInfo(LogTopic.IMS_EVENTS) { "handleChirpTranscriptionInline() - Calling transcribeWithChirp with enableFormatting: $enableFormatting, language: $selectedLanguage, modeTitle: $modeTitle, hasCustomPrompt: ${promptTemplate != null}" }
                 
                 val response = withTimeoutOrNull(NETWORK_TIMEOUT_MS) {
-                    client.transcribeWithChirp(audioFile, requestId, enableFormatting, selectedLanguage)
+                    client.transcribeWithChirp(audioFile, requestId, enableFormatting, selectedLanguage, promptTemplate, modeTitle)
                 }
                 
                 if (response != null) {
@@ -790,10 +813,14 @@ class VoiceInputManager(
         formattingJob = scope.launch(Dispatchers.IO) {
             try {
                 val useFormatting = loadEnabled(context)
+                val selectedMode = getSelectedMode(context)
+                val promptTemplate = if (selectedMode?.isDefaultMode() == false) selectedMode.template else null
+                val modeTitle = selectedMode?.title
+                
                 val formatted = if (useFormatting) {
                     withTimeoutOrNull(NETWORK_TIMEOUT_MS) {
                         try {
-                            client.formatTranscript(raw, requestId).formattedText
+                            client.formatTranscript(raw, requestId, promptTemplate, modeTitle).formattedText
                         } catch (auth: FormatServiceClient.AuthException) {
                             withContext(Dispatchers.Main) { 
                                 Toast.makeText(context, "Invalid formatting key", Toast.LENGTH_SHORT).show() 

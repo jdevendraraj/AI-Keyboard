@@ -675,7 +675,7 @@ class FlorisImeService : LifecycleInputMethodService() {
                                 .weight(keyboardWeight)
                                 .wrapContentHeight(),
                         ) {
-                            if (state.isVoiceOverlayVisible) {
+                            if (state.isVoiceOverlayVisible && !keyboardManager.voiceInputManager.inlineRecorderController.isInlineRecordingActive.value) {
                                 val isRecording by keyboardManager.voiceInputManager.isRecordingFlow.collectAsState()
                                 val isProcessing by keyboardManager.voiceInputManager.isProcessingFlow.collectAsState()
                                 dev.patrickgold.florisboard.ime.voice.VoiceOverlayPanel(

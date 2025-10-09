@@ -169,6 +169,37 @@ describe('Format Endpoint', () => {
       expect(response1.body.formattedText).toBe(response2.body.formattedText);
       expect(response1.body.requestId).toBe(response2.body.requestId);
     });
+
+    it('should include modeTitle in response when provided', async () => {
+      const requestData = {
+        transcript: 'hello world test',
+        requestId: 'test-mode-title-1',
+        modeTitle: 'Test Mode'
+      };
+
+      const response = await request(app)
+        .post('/api/format')
+        .set(validHeaders)
+        .send(requestData)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('modeTitle', 'Test Mode');
+    });
+
+    it('should not include modeTitle in response when not provided', async () => {
+      const requestData = {
+        transcript: 'hello world test',
+        requestId: 'test-no-mode-title-1'
+      };
+
+      const response = await request(app)
+        .post('/api/format')
+        .set(validHeaders)
+        .send(requestData)
+        .expect(200);
+
+      expect(response.body).not.toHaveProperty('modeTitle');
+    });
   });
 
   describe('GET /health', () => {

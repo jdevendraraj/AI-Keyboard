@@ -26,6 +26,8 @@ import dev.patrickgold.florisboard.ime.network.FormatServiceClient
 import dev.patrickgold.jetpref.datastore.ui.Preference
 import dev.patrickgold.jetpref.datastore.ui.PreferenceGroup
 import dev.patrickgold.florisboard.lib.compose.FlorisScreen
+import dev.patrickgold.florisboard.app.LocalNavController
+import dev.patrickgold.florisboard.app.Routes
 import org.florisboard.lib.compose.stringRes
 import dev.patrickgold.florisboard.R
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +52,7 @@ fun FormattingBackendScreen() = FlorisScreen {
     previewFieldVisible = true
 
     val context = LocalContext.current
+    val navController = LocalNavController.current
     val scope = rememberCoroutineScope()
 
     var baseUrl by remember { mutableStateOf(loadBaseUrl(context) ?: "") }
@@ -204,6 +207,19 @@ fun FormattingBackendScreen() = FlorisScreen {
                     enabled = !enabled
                     saveEnabled(context, enabled)
                 }
+            )
+        }
+
+        PreferenceGroup(title = "Prompt Modes") {
+            Preference(
+                title = "Manage Modes",
+                summary = "Create and edit custom prompt templates",
+                onClick = { navController.navigate(Routes.Settings.PromptModes) }
+            )
+            Preference(
+                title = "Selected Mode",
+                summary = getSelectedMode(context)?.title ?: "Default (backend prompt)",
+                onClick = { navController.navigate(Routes.Settings.PromptModes) }
             )
         }
 

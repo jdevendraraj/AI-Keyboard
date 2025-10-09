@@ -16,6 +16,7 @@ export interface LLMResponse {
 
 export interface LLMAdapter {
   formatText(transcript: string): Promise<LLMResponse>;
+  formatTextWithCustomPrompt(transcript: string, promptTemplate: string): Promise<LLMResponse>;
 }
 
 export class OpenAIAdapter implements LLMAdapter {
@@ -95,6 +96,67 @@ Text to format: ${transcript}`;
       throw error;
     }
   }
+
+  async formatTextWithCustomPrompt(transcript: string, promptTemplate: string): Promise<LLMResponse> {
+    // Replace {{transcript}} placeholder with actual transcript
+    // Escape any special characters that might break JSON
+    const escapedTranscript = transcript
+      .replace(/\\/g, '\\\\')  // Escape backslashes
+      .replace(/"/g, '\\"')    // Escape quotes
+      .replace(/\n/g, '\\n')   // Escape newlines
+      .replace(/\r/g, '\\r')   // Escape carriage returns
+      .replace(/\t/g, '\\t');  // Escape tabs
+    
+    const prompt = promptTemplate.replace(/\{\{transcript\}\}/g, escapedTranscript);
+
+    const startTime = Date.now();
+    
+    try {
+      const response = await this.client.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: this.temperature,
+        max_tokens: this.maxTokens
+      });
+
+      const duration = Date.now() - startTime;
+      const choice = response.choices[0];
+
+      if (!choice?.message?.content) {
+        throw new Error('No content in LLM response');
+      }
+
+      logger.info('LLM custom prompt request completed', {
+        duration,
+        model: this.model,
+        usage: response.usage,
+        promptLength: prompt.length
+      });
+
+      return {
+        text: choice.message.content,
+        usage: response.usage ? {
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens
+        } : undefined
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.error('LLM custom prompt request failed', {
+        duration,
+        model: this.model,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        promptLength: prompt.length
+      });
+      throw error;
+    }
+  }
 }
 
 /**
@@ -117,6 +179,29 @@ export class MockLLMAdapter implements LLMAdapter {
         promptTokens: transcript.length / 4,
         completionTokens: formatted.length / 4,
         totalTokens: (transcript.length + formatted.length) / 4
+      }
+    };
+  }
+
+  async formatTextWithCustomPrompt(transcript: string, promptTemplate: string): Promise<LLMResponse> {
+    // Mock implementation that replaces {{transcript}} and adds basic formatting
+    const processedPrompt = promptTemplate.replace(/\{\{transcript\}\}/g, transcript);
+    
+    // Simple mock that adds basic punctuation to the transcript
+    const formatted = transcript
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/([.!?])\s*([a-z])/g, '$1 $2')
+      .replace(/^([a-z])/, (match) => match.toUpperCase())
+      .replace(/([.!?])\s*$/, '$1')
+      .replace(/([.!?])\s*$/, '$1') || transcript + '.';
+
+    return {
+      text: formatted,
+      usage: {
+        promptTokens: processedPrompt.length / 4,
+        completionTokens: formatted.length / 4,
+        totalTokens: (processedPrompt.length + formatted.length) / 4
       }
     };
   }
