@@ -33,10 +33,23 @@ fun ModesScreen() = FlorisScreen {
     var modes by remember { mutableStateOf(getAllModes(context)) }
     var selectedModeId by remember { mutableStateOf(loadSelectedModeId(context)) }
     var modeToDelete by remember { mutableStateOf<Mode?>(null) }
+    var showErrorDialog by remember { mutableStateOf<String?>(null) }
 
     // Refresh modes when screen becomes visible
     LaunchedEffect(Unit) {
+        try {
+            modes = getAllModes(context)
+            selectedModeId = loadSelectedModeId(context) // Also refresh selected mode
+        } catch (e: Exception) {
+            android.util.Log.e("ModesScreen", "Failed to load modes", e)
+            showErrorDialog = "Failed to load modes: ${e.message}"
+        }
+    }
+
+    // Refresh modes when returning from editor
+    LaunchedEffect(navController.currentBackStackEntry) {
         modes = getAllModes(context)
+        selectedModeId = loadSelectedModeId(context)
     }
 
     floatingActionButton {
@@ -49,7 +62,8 @@ fun ModesScreen() = FlorisScreen {
 
     content {
         Column(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             modes.forEach { mode ->
                 ModeItem(
@@ -66,8 +80,6 @@ fun ModesScreen() = FlorisScreen {
                         modeToDelete = mode
                     }
                 )
-                
-                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }
@@ -84,9 +96,20 @@ fun ModesScreen() = FlorisScreen {
                 TextButton(
                     onClick = {
                         scope.launch {
-                            deleteCustomMode(context, mode.id)
-                            modes = getAllModes(context)
-                            modeToDelete = null
+                            try {
+                                deleteCustomMode(context, mode.id)
+                                modes = getAllModes(context)
+                                // If the deleted mode was selected, switch to default mode
+                                if (selectedModeId == mode.id) {
+                                    val defaultMode = Mode.BUILTIN_DEFAULT
+                                    selectedModeId = defaultMode.id
+                                    saveSelectedModeId(context, defaultMode.id)
+                                }
+                                modeToDelete = null
+                            } catch (e: Exception) {
+                                android.util.Log.e("ModesScreen", "Failed to delete mode", e)
+                                showErrorDialog = "Failed to delete mode: ${e.message}"
+                            }
                         }
                     }
                 ) {
@@ -96,6 +119,20 @@ fun ModesScreen() = FlorisScreen {
             dismissButton = {
                 TextButton(onClick = { modeToDelete = null }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Error dialog
+    showErrorDialog?.let { errorMessage ->
+        AlertDialog(
+            onDismissRequest = { showErrorDialog = null },
+            title = { Text("Error") },
+            text = { Text(errorMessage) },
+            confirmButton = {
+                TextButton(onClick = { showErrorDialog = null }) {
+                    Text("OK")
                 }
             }
         )

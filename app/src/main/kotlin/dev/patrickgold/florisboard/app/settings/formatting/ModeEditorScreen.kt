@@ -23,6 +23,7 @@ import dev.patrickgold.florisboard.lib.compose.FlorisScreen
 import dev.patrickgold.florisboard.app.LocalNavController
 import dev.patrickgold.florisboard.app.Routes
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 @Composable
 fun ModeEditorScreen(modeId: String?) = FlorisScreen {
@@ -92,7 +93,7 @@ fun ModeEditorScreen(modeId: String?) = FlorisScreen {
                 maxLines = 8,
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.Sentences,
-                    imeAction = ImeAction.Done
+                    imeAction = ImeAction.Default
                 ),
                 keyboardActions = KeyboardActions(
                     onDone = { focusManager.clearFocus() }
@@ -159,7 +160,7 @@ fun ModeEditorScreen(modeId: String?) = FlorisScreen {
                 onClick = {
                     scope.launch {
                         val newMode = Mode(
-                            id = existingMode?.id ?: "",
+                            id = existingMode?.id ?: UUID.randomUUID().toString(),
                             title = title.trim(),
                             template = template.trim(),
                             isBuiltIn = false
