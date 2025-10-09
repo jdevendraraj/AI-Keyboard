@@ -412,6 +412,12 @@ data class TextKeyData(
             code = KeyCode.IME_UI_MODE_CLIPBOARD,
             label = "ime_ui_mode_clipboard",
         )
+        /** Predefined key data for [KeyCode.CYCLE_PROMPT_MODE] */
+        val CYCLE_PROMPT_MODE = TextKeyData(
+            type = KeyType.FUNCTION,
+            code = KeyCode.CYCLE_PROMPT_MODE,
+            label = "cycle_prompt_mode",
+        )
 
         /** Predefined key data for [KeyCode.SYSTEM_INPUT_METHOD_PICKER] */
         val SYSTEM_INPUT_METHOD_PICKER = TextKeyData(

@@ -244,6 +244,9 @@ fun ComputingEvaluator.computeImageVector(data: KeyData): ImageVector? {
         KeyCode.IME_UI_MODE_CLIPBOARD -> {
             Icons.AutoMirrored.Outlined.Assignment
         }
+        KeyCode.CYCLE_PROMPT_MODE -> {
+            this.context()?.vectorResource(id = R.drawable.ic_mode_switcher)
+        }
         KeyCode.LANGUAGE_SWITCH -> {
             Icons.Default.Language
         }

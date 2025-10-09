@@ -27,6 +27,9 @@ import androidx.lifecycle.MutableLiveData
 import dev.patrickgold.florisboard.FlorisImeService
 import dev.patrickgold.florisboard.R
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
+import dev.patrickgold.florisboard.app.settings.formatting.getAllModes
+import dev.patrickgold.florisboard.app.settings.formatting.loadSelectedModeId
+import dev.patrickgold.florisboard.app.settings.formatting.saveSelectedModeId
 import dev.patrickgold.florisboard.appContext
 import dev.patrickgold.florisboard.clipboardManager
 import dev.patrickgold.florisboard.editorInstance
@@ -745,6 +748,15 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             KeyCode.IME_UI_MODE_TEXT -> activeState.imeUiMode = ImeUiMode.TEXT
             KeyCode.IME_UI_MODE_MEDIA -> activeState.imeUiMode = ImeUiMode.MEDIA
             KeyCode.IME_UI_MODE_CLIPBOARD -> activeState.imeUiMode = ImeUiMode.CLIPBOARD
+            KeyCode.CYCLE_PROMPT_MODE -> {
+                val allModes = getAllModes(appContext)
+                val currentModeId = loadSelectedModeId(appContext)
+                val currentIndex = allModes.indexOfFirst { it.id == currentModeId }
+                val nextIndex = (currentIndex + 1) % allModes.size
+                val nextMode = allModes[nextIndex]
+                saveSelectedModeId(appContext, nextMode.id)
+                Toast.makeText(appContext, "Mode: ${nextMode.title}", Toast.LENGTH_SHORT).show()
+            }
             KeyCode.VOICE_INPUT -> {
                 dev.patrickgold.florisboard.lib.devtools.flogInfo(dev.patrickgold.florisboard.lib.devtools.LogTopic.IMS_EVENTS) { "VOICE_INPUT tapped - using inline mode" }
                 voiceInputManager.toggleVoiceInput()

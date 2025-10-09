@@ -73,7 +73,7 @@ data class QuickActionArrangement(
                 QuickAction.InsertKey(TextKeyData.SETTINGS),
                 QuickAction.InsertKey(TextKeyData.TOGGLE_INCOGNITO_MODE),
                 QuickAction.InsertKey(TextKeyData.IME_UI_MODE_CLIPBOARD),
-                QuickAction.InsertKey(TextKeyData.IME_UI_MODE_MEDIA),
+                QuickAction.InsertKey(TextKeyData.CYCLE_PROMPT_MODE),
                 QuickAction.InsertKey(TextKeyData.TOGGLE_COMPACT_LAYOUT),
                 QuickAction.InsertKey(TextKeyData.TOGGLE_AUTOCORRECT),
                 QuickAction.InsertKey(TextKeyData.ARROW_UP),
