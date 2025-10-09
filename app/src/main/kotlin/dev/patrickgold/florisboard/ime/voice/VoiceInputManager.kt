@@ -38,7 +38,7 @@ class VoiceInputManager(
     private val scope: CoroutineScope,
 ) {
     companion object {
-        private const val NETWORK_TIMEOUT_MS = 30_000L // 30 seconds
+        private const val NETWORK_TIMEOUT_MS = 1_800_000L // 30 minutes for Chirp API
     }
     private var speechRecognizer: SpeechRecognizer? = null
     private var formattingJob: Job? = null

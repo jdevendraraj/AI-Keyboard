@@ -48,7 +48,7 @@ class FormatServiceClient(
     private val apiKeyProvider: () -> String?,
     connectTimeoutSeconds: Long = 3,
     readTimeoutSeconds: Long = 6,
-    chirpTimeoutSeconds: Long = 10,
+    chirpTimeoutSeconds: Long = 1800, // 30 minutes for Chirp API
 ) : IFormatServiceClient {
 
     @Serializable
