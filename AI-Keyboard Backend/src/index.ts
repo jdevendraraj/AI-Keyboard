@@ -22,8 +22,8 @@ const result = config({ path: envPath });
 if (result.parsed) {
   Object.assign(process.env, result.parsed);
 }
-import { createServer } from './server';
-import { logger } from './lib/logger';
+import { createServer } from './server.js';
+import { logger } from './lib/logger.js';
 
 
 const PORT = parseInt(process.env.PORT || '3000');

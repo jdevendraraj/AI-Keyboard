@@ -8,10 +8,10 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-import { logger } from './lib/logger';
-import { authenticateClient } from './lib/auth';
-import formatRouter from './routes/format';
-import { transcribeChirpHandler, upload } from './routes/transcribeChirp';
+import { logger } from './lib/logger.js';
+import { authenticateClient } from './lib/auth.js';
+import formatRouter from './routes/format.js';
+import { transcribeChirpHandler, upload } from './routes/transcribeChirp.js';
 
 // Load environment variables
 dotenv.config();

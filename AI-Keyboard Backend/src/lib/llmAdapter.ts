@@ -3,7 +3,7 @@
  */
 
 import OpenAI from 'openai';
-import { logger } from './logger';
+import { logger } from './logger.js';
 
 export interface LLMResponse {
   text: string;

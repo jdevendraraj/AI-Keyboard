@@ -4,10 +4,10 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
-import { chirpAdapter } from '../lib/chirpAdapter';
-import { createLLMAdapter } from '../lib/llmAdapter';
-import { logger } from '../lib/logger';
-import { authenticateClient } from '../lib/auth';
+import { chirpAdapter } from '../lib/chirpAdapter.js';
+import { createLLMAdapter } from '../lib/llmAdapter.js';
+import { logger } from '../lib/logger.js';
+import { authenticateClient } from '../lib/auth.js';
 
 // Configure multer for file uploads
 const upload = multer({

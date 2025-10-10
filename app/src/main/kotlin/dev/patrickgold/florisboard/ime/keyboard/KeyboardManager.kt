@@ -750,13 +750,6 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             KeyCode.IME_UI_MODE_CLIPBOARD -> activeState.imeUiMode = ImeUiMode.CLIPBOARD
             KeyCode.CYCLE_PROMPT_MODE -> {
                 val allModes = getAllModes(appContext)
-                // Edge case: empty modes list - should never happen with built-in modes, but be safe
-                if (allModes.isEmpty()) {
-                    android.util.Log.w("KeyboardManager", "No modes available for cycling")
-                    Toast.makeText(appContext, "No modes available", Toast.LENGTH_SHORT).show()
-                    return
-                }
-                
                 val currentModeId = loadSelectedModeId(appContext)
                 val currentIndex = allModes.indexOfFirst { it.id == currentModeId }
                 // If current mode not found (deleted or null), start from index 0

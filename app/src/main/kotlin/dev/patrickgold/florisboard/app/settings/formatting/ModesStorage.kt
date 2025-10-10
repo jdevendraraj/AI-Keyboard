@@ -78,21 +78,11 @@ fun getAllModes(context: Context): List<Mode> {
 }
 
 /**
- * Get the currently selected mode, ensuring it's valid
+ * Get the currently selected mode
  */
 fun getSelectedMode(context: Context): Mode? {
     val selectedId = loadSelectedModeId(context)
-    val allModes = getAllModes(context)
-    val selectedMode = allModes.find { it.id == selectedId }
-    
-    // Edge case: selected mode doesn't exist anymore, auto-fix by selecting default
-    if (selectedId != null && selectedMode == null) {
-        android.util.Log.w("ModesStorage", "Selected mode '$selectedId' not found, switching to default")
-        saveSelectedModeId(context, Mode.BUILTIN_DEFAULT.id)
-        return Mode.BUILTIN_DEFAULT
-    }
-    
-    return selectedMode
+    return getAllModes(context).find { it.id == selectedId }
 }
 
 /**

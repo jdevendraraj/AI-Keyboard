@@ -1,5 +1,5 @@
 import { SpeechClient } from '@google-cloud/speech';
-import { logger } from './logger';
+import { logger } from './logger.js';
 
 export interface ChirpTranscriptionResult {
   transcript: string;

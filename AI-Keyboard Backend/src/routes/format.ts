@@ -3,10 +3,10 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { createLLMAdapter, withRetry } from '../lib/llmAdapter';
-import { idempotencyCache } from '../lib/idempotency';
-import { logger } from '../lib/logger';
-import { AuthenticatedRequest } from '../lib/auth';
+import { createLLMAdapter, withRetry } from '../lib/llmAdapter.js';
+import { idempotencyCache } from '../lib/idempotency.js';
+import { logger } from '../lib/logger.js';
+import { AuthenticatedRequest } from '../lib/auth.js';
 import crypto from 'crypto';
 
 const router = Router();

@@ -3,7 +3,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { logger } from './logger';
+import { logger } from './logger.js';
 
 export interface AuthenticatedRequest extends Request {
   clientKey?: string;

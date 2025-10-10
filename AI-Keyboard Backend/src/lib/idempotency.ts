@@ -3,7 +3,7 @@
  * In production, this should be replaced with Redis or similar persistent store
  */
 
-import { logger } from './logger';
+import { logger } from './logger.js';
 
 interface CacheEntry {
   response: any;
